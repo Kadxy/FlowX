@@ -9,7 +9,7 @@ final class MusicController: ObservableObject {
     @Published private(set) var currentTrack: TrackInfo = .empty
     @Published private(set) var isMusicRunning: Bool = false
     @Published private(set) var currentLyricLine: String = ""
-    @Published private(set) var lyricLineDuration: TimeInterval = 0
+    @Published private(set) var hasLyrics: Bool = false
 
     private(set) var playerPosition: TimeInterval = 0
 
@@ -137,18 +137,24 @@ final class MusicController: ObservableObject {
 
         lastFetchedTrackIdentity = identity
         lyrics = []
+        hasLyrics = false
         currentLyricLine = ""
         lastActiveIndex = -1
 
         let track = currentTrack
         Task {
-            if let lines = await amLyrics.fetchLyrics(
+            let lines = await amLyrics.fetchLyrics(
                 trackName: track.title,
                 artistName: track.artist,
                 duration: track.duration,
                 persistentID: track.persistentID
-            ) {
-                self.lyrics = lines
+            )
+            await MainActor.run {
+                guard self.currentTrack.identity == track.identity else { return }
+                if let lines, !lines.isEmpty {
+                    self.lyrics = lines
+                    self.hasLyrics = true
+                }
             }
         }
     }
@@ -166,11 +172,7 @@ final class MusicController: ObservableObject {
 
         if activeIdx != lastActiveIndex {
             lastActiveIndex = activeIdx
-            let text = activeIdx >= 0 ? lyrics[activeIdx].text : ""
-            let nextTime = activeIdx + 1 < lyrics.count ? lyrics[activeIdx + 1].time : currentTrack.duration
-            let curTime = activeIdx >= 0 ? lyrics[activeIdx].time : 0
-            currentLyricLine = text
-            lyricLineDuration = nextTime - curTime
+            currentLyricLine = activeIdx >= 0 ? lyrics[activeIdx].text : ""
         }
     }
 

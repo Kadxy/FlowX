@@ -51,9 +51,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         mc.$currentLyricLine.removeDuplicates().receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.updateTicker() }.store(in: &cancellables)
-        mc.$lyricLineDuration.removeDuplicates().receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.updateTicker() }.store(in: &cancellables)
         mc.$currentTrack.removeDuplicates().receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.updateTicker() }.store(in: &cancellables)
+        mc.$hasLyrics.removeDuplicates().receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.updateTicker() }.store(in: &cancellables)
         mc.$playerState.removeDuplicates().receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.tickerView.isPlaying = self?.mc.playerState.isPlaying ?? false }
@@ -71,18 +71,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func updateTicker() {
         guard mc.isMusicRunning, !mc.currentTrack.title.isEmpty else {
-            tickerView.loop = false
             tickerView.text = "♪ Not Playing"
             return
         }
 
-        if !mc.currentLyricLine.isEmpty {
-            tickerView.loop = false
-            tickerView.lineDuration = mc.lyricLineDuration
+        let trackLabel = "\(mc.currentTrack.title) - \(mc.currentTrack.artist)"
+
+        if mc.hasLyrics, !mc.currentLyricLine.isEmpty {
             tickerView.text = mc.currentLyricLine
         } else {
-            tickerView.loop = true
-            tickerView.text = "\(mc.currentTrack.title) - \(mc.currentTrack.artist)"
+            tickerView.text = trackLabel
         }
 
         tickerView.isPlaying = mc.playerState.isPlaying
