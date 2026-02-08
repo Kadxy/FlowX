@@ -17,6 +17,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var tickerView: TickerView!
     private let mc = MusicController.shared
     private var cancellables = Set<AnyCancellable>()
+    private lazy var menu = makeMenu()
+    private var showLyricsItem: NSMenuItem!
 
     private var tickerWidth: CGFloat {
         CGFloat(AppSettings.shared.tickerWidth)
@@ -33,7 +35,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         logoItem.button?.target = self
         logoItem.button?.action = #selector(logoClicked)
         logoItem.button?.sendAction(on: [.leftMouseUp])
-        logoItem.menu = makeMenu()
 
         // Ticker item — display only, created second so it appears to the left
         let w = tickerWidth
@@ -47,6 +48,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         tickerView.onNext = { [weak self] in self?.mc.nextTrack() }
         tickerItem.button?.addSubview(tickerView)
 
+        applyTickerVisibility()
         updateTicker()
 
         NotificationCenter.default.addObserver(
@@ -54,33 +56,58 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             name: .tickerWidthChanged, object: nil
         )
 
-        mc.$currentLyricLine.removeDuplicates().receive(on: RunLoop.main)
+        mc.$currentLyricLine.removeDuplicates().receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.updateTicker() }.store(in: &cancellables)
-        mc.$currentTrack.removeDuplicates().receive(on: RunLoop.main)
+        mc.$currentTrack.removeDuplicates().receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.updateTicker() }.store(in: &cancellables)
-        mc.$hasLyrics.removeDuplicates().receive(on: RunLoop.main)
+        mc.$hasLyrics.removeDuplicates().receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.updateTicker() }.store(in: &cancellables)
-        mc.$playerState.removeDuplicates().receive(on: RunLoop.main)
+        mc.$playerState.removeDuplicates().receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.tickerView.isPlaying = self?.mc.playerState.isPlaying ?? false }
             .store(in: &cancellables)
-        mc.$isMusicRunning.removeDuplicates().receive(on: RunLoop.main)
+        mc.$isMusicRunning.removeDuplicates().receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.updateTicker() }.store(in: &cancellables)
     }
 
     @objc private func logoClicked() {
-        NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Music.app"))
+        guard let button = logoItem.button else { return }
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 5), in: button)
+        // Refresh after menu closes (RunLoop was blocked during tracking)
+        updateTicker()
     }
 
     private func makeMenu() -> NSMenu {
         let menu = NSMenu()
+
+        showLyricsItem = NSMenuItem(title: "Show Lyrics", action: #selector(toggleShowLyrics), keyEquivalent: "")
+        showLyricsItem.target = self
+        showLyricsItem.state = AppSettings.shared.showLyrics ? .on : .off
+        menu.addItem(showLyricsItem)
+
+        menu.addItem(NSMenuItem.separator())
+
         let settingsItem = NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ",")
         settingsItem.target = self
         menu.addItem(settingsItem)
+
         menu.addItem(NSMenuItem.separator())
+
         let quitItem = NSMenuItem(title: "Quit FlowX", action: #selector(quitApp), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
+
         return menu
+    }
+
+    @objc private func toggleShowLyrics() {
+        let newValue = !AppSettings.shared.showLyrics
+        AppSettings.shared.showLyrics = newValue
+        showLyricsItem.state = newValue ? .on : .off
+        applyTickerVisibility()
+    }
+
+    private func applyTickerVisibility() {
+        tickerItem.isVisible = AppSettings.shared.showLyrics
     }
 
     @objc private func openSettings() {

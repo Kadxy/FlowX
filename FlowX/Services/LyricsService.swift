@@ -87,7 +87,10 @@ final class LyricsService {
                 let songArtist = attrs["artistName"] as? String ?? ""
                 let isExactTitle = songName == name
 
-                logger.info("  [\(id)] '\(songName)' by '\(songArtist)', dur=\(String(format: "%.1f", songDur))s (Δ\(String(format: "%.1f", diff))s)\(isExactTitle ? " ✓exact" : "")")
+                let durStr = String(format: "%.1f", songDur)
+                let diffStr = String(format: "%.1f", diff)
+                let exact = isExactTitle ? " ✓exact" : ""
+                logger.info("  [\(id)] '\(songName)' by '\(songArtist)', dur=\(durStr)s (Δ\(diffStr)s)\(exact)")
 
                 // 优先标题精确匹配，其次 duration 最接近
                 let dominated: Bool
@@ -163,7 +166,8 @@ final class LyricsService {
 
     // MARK: - API Request
 
-    private static let userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+    private static let userAgent =
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
 
     private func apiRequest(url: URL, needsUserToken: Bool = false) async -> Data? {
         var req = URLRequest(url: url)

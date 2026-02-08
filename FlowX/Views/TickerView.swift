@@ -60,8 +60,9 @@ final class TickerView: NSView {
             let btn = NSButton(frame: .zero)
             btn.bezelStyle = .inline
             btn.isBordered = false
-            btn.image = NSImage(systemSymbolName: icon, accessibilityDescription: nil)
-            btn.imageScaling = .scaleProportionallyDown
+            let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
+            btn.image = NSImage(systemSymbolName: icon, accessibilityDescription: nil)?.withSymbolConfiguration(config)
+            btn.imageScaling = .scaleNone
             (btn.cell as? NSButtonCell)?.highlightsBy = []
             btn.target = self
             btn.action = #selector(buttonTapped(_:))
@@ -85,10 +86,11 @@ final class TickerView: NSView {
     }
 
     private func updateButtonIcon() {
+        let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
         btnPlayPause?.image = NSImage(
             systemSymbolName: isPlaying ? "pause.fill" : "play.fill",
             accessibilityDescription: nil
-        )
+        )?.withSymbolConfiguration(config)
     }
 
     // MARK: - Tracking area (hover detection)
@@ -136,13 +138,16 @@ final class TickerView: NSView {
     }
 
     private func relayoutButtons() {
-        let btnW: CGFloat = 28
-        let gap: CGFloat = 4
+        let btnH: CGFloat = 30
+        let gap: CGFloat = 12
         let buttons = [btnPrev, btnPlayPause, btnNext].compactMap { $0 }
-        let total = CGFloat(buttons.count) * btnW + CGFloat(buttons.count - 1) * gap
-        let startX = (bounds.width - total) / 2
+        buttons.forEach { $0.sizeToFit() }
+        let total = buttons.reduce(0) { $0 + $1.frame.width } + CGFloat(buttons.count - 1) * gap
+        var x = (bounds.width - total) / 2
+        let y = (bounds.height - btnH) / 2
         for (i, btn) in buttons.enumerated() {
-            btn.frame = NSRect(x: startX + CGFloat(i) * (btnW + gap), y: 0, width: btnW, height: bounds.height)
+            btn.frame = NSRect(x: x, y: y, width: btn.frame.width, height: btnH)
+            x += btn.frame.width + (i < buttons.count - 1 ? gap : 0)
         }
     }
 

@@ -52,6 +52,7 @@ struct CharWrapTextView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSTextView.scrollableTextView()
+        // swiftlint:disable:next force_cast
         let textView = scrollView.documentView as! NSTextView
 
         textView.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
@@ -78,6 +79,7 @@ struct CharWrapTextView: NSViewRepresentable {
     }
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        // swiftlint:disable:next force_cast
         let textView = scrollView.documentView as! NSTextView
         if textView.string != text {
             textView.string = text

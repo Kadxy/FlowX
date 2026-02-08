@@ -1,0 +1,16 @@
+excluded:
+  - FlowX/Bridge
+
+line_length:
+  warning: 150
+  error: 200
+
+identifier_name:
+  min_length:
+    warning: 1
+
+force_cast: warning
+
+type_name:
+  min_length:
+    warning: 1

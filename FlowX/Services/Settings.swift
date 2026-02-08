@@ -53,6 +53,11 @@ final class AppSettings {
         set { data["tickerWidth"] = newValue; save() }
     }
 
+    var showLyrics: Bool {
+        get { data["showLyrics"] as? Bool ?? true }
+        set { data["showLyrics"] = newValue; save() }
+    }
+
     // MARK: - Persistence
 
     private func save() {

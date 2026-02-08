@@ -7,12 +7,14 @@ struct TrackInfo: Equatable {
     let duration: TimeInterval
     let persistentID: String
     let isFavorited: Bool
-    let isDisliked: Bool
 
     static let empty = TrackInfo(
-        title: "", artist: "", album: "",
-        duration: 0, persistentID: "",
-        isFavorited: false, isDisliked: false
+        title: "",
+        artist: "",
+        album: "",
+        duration: 0,
+        persistentID: "",
+        isFavorited: false
     )
 
     var identity: String {

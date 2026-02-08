@@ -32,9 +32,11 @@ final class MusicController: ObservableObject {
         )
 
         // Timer only for position updates (lyric sync)
-        Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+        // Use .common mode so it keeps firing during menu tracking
+        let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
             self?.pollPosition()
         }
+        RunLoop.main.add(timer, forMode: .common)
 
         // Initial state
         refreshState()
@@ -76,8 +78,7 @@ final class MusicController: ObservableObject {
                 album: album,
                 duration: duration,
                 persistentID: persistentID,
-                isFavorited: false,
-                isDisliked: false
+                isFavorited: false
             )
             if newTrack != currentTrack {
                 currentTrack = newTrack
@@ -122,8 +123,7 @@ final class MusicController: ObservableObject {
                 album: track.album ?? "",
                 duration: track.duration,
                 persistentID: track.persistentID ?? "",
-                isFavorited: false,
-                isDisliked: false
+                isFavorited: false
             )
             onTrackChanged()
         }
