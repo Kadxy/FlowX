@@ -90,7 +90,13 @@ final class LyricsService {
                 logger.info("  [\(id)] '\(songName)' by '\(songArtist)', dur=\(String(format: "%.1f", songDur))s (Δ\(String(format: "%.1f", diff))s)\(isExactTitle ? " ✓exact" : "")")
 
                 // 优先标题精确匹配，其次 duration 最接近
-                if diff < bestDiff || (diff == bestDiff && isExactTitle && !bestExact) {
+                let dominated: Bool
+                if isExactTitle != bestExact {
+                    dominated = isExactTitle  // 精确标题优先
+                } else {
+                    dominated = diff < bestDiff
+                }
+                if dominated {
                     bestDiff = diff
                     bestId = id
                     bestExact = isExactTitle
