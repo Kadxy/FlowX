@@ -20,18 +20,15 @@ final class MenuBarLyricsView: NSView {
     // Pre-cached SF Symbol images
     private let iconConfig = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
         .applying(.init(hierarchicalColor: .labelColor))
-    private lazy var prevImage = NSImage(
-        systemSymbolName: "backward.end.fill", accessibilityDescription: nil
-    )?.withSymbolConfiguration(iconConfig)
-    private lazy var playImage = NSImage(
-        systemSymbolName: "play.fill", accessibilityDescription: nil
-    )?.withSymbolConfiguration(iconConfig)
-    private lazy var pauseImage = NSImage(
-        systemSymbolName: "pause.fill", accessibilityDescription: nil
-    )?.withSymbolConfiguration(iconConfig)
-    private lazy var nextImage = NSImage(
-        systemSymbolName: "forward.end.fill", accessibilityDescription: nil
-    )?.withSymbolConfiguration(iconConfig)
+    private lazy var prevImage = symbol("backward.end.fill")
+    private lazy var playImage = symbol("play.fill")
+    private lazy var pauseImage = symbol("pause.fill")
+    private lazy var nextImage = symbol("forward.end.fill")
+
+    private func symbol(_ name: String) -> NSImage? {
+        NSImage(systemSymbolName: name, accessibilityDescription: nil)?
+            .withSymbolConfiguration(iconConfig)
+    }
 
     var onPrev: (() -> Void)?
     var onPlayPause: (() -> Void)?
@@ -48,9 +45,7 @@ final class MenuBarLyricsView: NSView {
     var font: NSFont = NSFont.systemFont(ofSize: 14) {
         didSet {
             cachedTextSize = (currentText as NSString).size(withAttributes: [.font: font])
-            teardownLayers()
-            needsDisplay = true
-            rebuildIfNeeded()
+            invalidateAndRebuild()
         }
     }
 
@@ -60,9 +55,7 @@ final class MenuBarLyricsView: NSView {
             guard newValue != currentText else { return }
             currentText = newValue
             cachedTextSize = (newValue as NSString).size(withAttributes: [.font: font])
-            teardownLayers()
-            needsDisplay = true
-            rebuildIfNeeded()
+            invalidateAndRebuild()
         }
     }
 
@@ -86,9 +79,7 @@ final class MenuBarLyricsView: NSView {
         let oldWidth = bounds.width
         super.setFrameSize(newSize)
         guard newSize.width != oldWidth else { return }
-        teardownLayers()
-        needsDisplay = true
-        rebuildIfNeeded()
+        invalidateAndRebuild()
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -97,6 +88,10 @@ final class MenuBarLyricsView: NSView {
     }
 
     func refreshLayers() {
+        invalidateAndRebuild()
+    }
+
+    private func invalidateAndRebuild() {
         teardownLayers()
         needsDisplay = true
         rebuildIfNeeded()
@@ -319,9 +314,8 @@ final class MenuBarLyricsView: NSView {
     // MARK: - Layer lifecycle
 
     private func teardownLayers() {
-        textImageLayer?.removeFromSuperlayer(); textImageLayer = nil
-        dimImageLayer?.removeFromSuperlayer(); dimImageLayer = nil
-        brightImageLayer?.removeFromSuperlayer(); brightImageLayer = nil
+        [textImageLayer, dimImageLayer, brightImageLayer].forEach { $0?.removeFromSuperlayer() }
+        textImageLayer = nil; dimImageLayer = nil; brightImageLayer = nil
         karaokeMask = nil
         cachedWordWidths = []
         isLayerMode = false
@@ -371,9 +365,7 @@ final class MenuBarLyricsView: NSView {
     }
 
     private func setLayersHidden(_ hidden: Bool) {
-        textImageLayer?.isHidden = hidden
-        dimImageLayer?.isHidden = hidden
-        brightImageLayer?.isHidden = hidden
+        [textImageLayer, dimImageLayer, brightImageLayer].forEach { $0?.isHidden = hidden }
     }
 
     private func drawStaticLyrics() {

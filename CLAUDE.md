@@ -4,6 +4,7 @@
 
 - Regardless of the language in which the question is asked or the context is provided, ALWAYS answer in Simplified Chinese.
 - Always follow Apple’s Human Interface Guidelines and best practices
+- Refactoring should not simplify or alter functionality, reduce readability, or violate best practices.
 
 ## Project Overview
 
