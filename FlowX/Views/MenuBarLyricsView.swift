@@ -1,6 +1,6 @@
 import AppKit
 
-final class TickerView: NSView {
+final class MenuBarLyricsView: NSView {
     private let label = NSTextField(labelWithString: "")
     private var currentText = ""
     private var isHovering = false

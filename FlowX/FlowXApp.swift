@@ -13,15 +13,15 @@ struct FlowXApp: App {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var logoItem: NSStatusItem!
-    private var tickerItem: NSStatusItem!
-    private var tickerView: TickerView!
+    private var lyricsItem: NSStatusItem!
+    private var lyricsView: MenuBarLyricsView!
     private let mc = MusicController.shared
     private var cancellables = Set<AnyCancellable>()
     private lazy var menu = makeMenu()
-    private var showLyricsItem: NSMenuItem!
+    private var menuBarLyricsItem: NSMenuItem!
 
-    private var tickerWidth: CGFloat {
-        CGFloat(AppSettings.shared.tickerWidth)
+    private var menuBarWidth: CGFloat {
+        CGFloat(AppSettings.shared.menuBarWidth)
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -36,78 +36,79 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         logoItem.button?.action = #selector(logoClicked)
         logoItem.button?.sendAction(on: [.leftMouseUp])
 
-        // Ticker item — display only, created second so it appears to the left
-        let w = tickerWidth
-        tickerItem = NSStatusBar.system.statusItem(withLength: w)
-        tickerItem.button?.sendAction(on: [])
+        // Lyrics item — display only, created second so it appears to the left
+        let w = menuBarWidth
+        lyricsItem = NSStatusBar.system.statusItem(withLength: w)
+        lyricsItem.button?.sendAction(on: [])
 
-        tickerView = TickerView(frame: NSRect(x: 0, y: 0, width: w, height: 22))
-        tickerView.font = NSFont.systemFont(ofSize: 14)
-        tickerView.onPrev = { [weak self] in self?.mc.previousTrack() }
-        tickerView.onPlayPause = { [weak self] in self?.mc.playPause() }
-        tickerView.onNext = { [weak self] in self?.mc.nextTrack() }
-        tickerItem.button?.addSubview(tickerView)
+        lyricsView = MenuBarLyricsView(frame: NSRect(x: 0, y: 0, width: w, height: 22))
+        lyricsView.font = NSFont.systemFont(ofSize: 14)
+        lyricsView.onPrev = { [weak self] in self?.mc.previousTrack() }
+        lyricsView.onPlayPause = { [weak self] in self?.mc.playPause() }
+        lyricsView.onNext = { [weak self] in self?.mc.nextTrack() }
+        lyricsItem.button?.addSubview(lyricsView)
 
-        applyTickerVisibility()
-        updateTicker()
+        applyMenuBarVisibility()
+        updateMenuBar()
 
         NotificationCenter.default.addObserver(
-            self, selector: #selector(onWidthChanged),
-            name: .tickerWidthChanged, object: nil
+            self, selector: #selector(onMenuBarWidthChanged),
+            name: .menuBarWidthChanged, object: nil
         )
 
         mc.$currentLyricLine.removeDuplicates().receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.updateTicker() }.store(in: &cancellables)
+            .sink { [weak self] _ in self?.updateMenuBar() }.store(in: &cancellables)
         mc.$currentTrack.removeDuplicates().receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.updateTicker() }.store(in: &cancellables)
+            .sink { [weak self] _ in self?.updateMenuBar() }.store(in: &cancellables)
         mc.$hasLyrics.removeDuplicates().receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.updateTicker() }.store(in: &cancellables)
+            .sink { [weak self] _ in self?.updateMenuBar() }.store(in: &cancellables)
         mc.$playerState.removeDuplicates().receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.tickerView.isPlaying = self?.mc.playerState.isPlaying ?? false }
+            .sink { [weak self] _ in self?.lyricsView.isPlaying = self?.mc.playerState.isPlaying ?? false }
             .store(in: &cancellables)
         mc.$isMusicRunning.removeDuplicates().receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.updateTicker() }.store(in: &cancellables)
+            .sink { [weak self] _ in self?.updateMenuBar() }.store(in: &cancellables)
     }
 
     @objc private func logoClicked() {
         guard let button = logoItem.button else { return }
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 5), in: button)
         // Refresh after menu closes (RunLoop was blocked during tracking)
-        updateTicker()
+        updateMenuBar()
     }
 
     private func makeMenu() -> NSMenu {
         let menu = NSMenu()
 
-        showLyricsItem = NSMenuItem(title: "Show Lyrics", action: #selector(toggleShowLyrics), keyEquivalent: "")
-        showLyricsItem.target = self
-        showLyricsItem.state = AppSettings.shared.showLyrics ? .on : .off
-        menu.addItem(showLyricsItem)
-
-        menu.addItem(NSMenuItem.separator())
+        menuBarLyricsItem = NSMenuItem(title: "Menu Bar Lyrics", action: #selector(toggleMenuBarLyrics), keyEquivalent: "")
+        menuBarLyricsItem.target = self
+        menuBarLyricsItem.image = NSImage(systemSymbolName: "text.quote", accessibilityDescription: nil)
+        menuBarLyricsItem.state = AppSettings.shared.showMenuBarLyrics ? .on : .off
+        menu.addItem(menuBarLyricsItem)
 
         let settingsItem = NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ",")
         settingsItem.target = self
+        settingsItem.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: nil)
         menu.addItem(settingsItem)
 
         menu.addItem(NSMenuItem.separator())
 
         let quitItem = NSMenuItem(title: "Quit FlowX", action: #selector(quitApp), keyEquivalent: "q")
         quitItem.target = self
+        quitItem.image = NSImage(systemSymbolName: "power", accessibilityDescription: nil)
         menu.addItem(quitItem)
 
         return menu
     }
 
-    @objc private func toggleShowLyrics() {
-        let newValue = !AppSettings.shared.showLyrics
-        AppSettings.shared.showLyrics = newValue
-        showLyricsItem.state = newValue ? .on : .off
-        applyTickerVisibility()
+    @objc private func toggleMenuBarLyrics() {
+        let newValue = !AppSettings.shared.showMenuBarLyrics
+        AppSettings.shared.showMenuBarLyrics = newValue
+        menuBarLyricsItem.state = newValue ? .on : .off
+        applyMenuBarVisibility()
     }
 
-    private func applyTickerVisibility() {
-        tickerItem.isVisible = AppSettings.shared.showLyrics
+    private func applyMenuBarVisibility() {
+        lyricsItem.isVisible = AppSettings.shared.showMenuBarLyrics
     }
 
     @objc private func openSettings() {
@@ -118,26 +119,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.terminate(nil)
     }
 
-    @objc private func onWidthChanged() {
-        let w = tickerWidth
-        tickerItem.length = w
-        tickerView.frame = NSRect(x: 0, y: 0, width: w, height: 22)
+    @objc private func onMenuBarWidthChanged() {
+        let w = menuBarWidth
+        lyricsItem.length = w
+        lyricsView.frame = NSRect(x: 0, y: 0, width: w, height: 22)
     }
 
-    private func updateTicker() {
+    private func updateMenuBar() {
         guard mc.isMusicRunning, !mc.currentTrack.title.isEmpty else {
-            tickerView.text = "♪ Not Playing"
+            lyricsView.text = "♪ Not Playing"
             return
         }
 
         let trackLabel = "\(mc.currentTrack.title) - \(mc.currentTrack.artist)"
 
         if mc.hasLyrics, !mc.currentLyricLine.isEmpty {
-            tickerView.text = mc.currentLyricLine
+            lyricsView.text = mc.currentLyricLine
         } else {
-            tickerView.text = trackLabel
+            lyricsView.text = trackLabel
         }
 
-        tickerView.isPlaying = mc.playerState.isPlaying
+        lyricsView.isPlaying = mc.playerState.isPlaying
     }
 }

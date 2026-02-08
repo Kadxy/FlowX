@@ -140,7 +140,7 @@ private let storefronts = ["cn", "us", "jp"]
 struct SettingsView: View {
     @State private var userToken: String = AppSettings.shared.userToken
     @State private var storefront: String = AppSettings.shared.storefront
-    @State private var tickerWidth: Double = AppSettings.shared.tickerWidth
+    @State private var menuBarWidth: Double = AppSettings.shared.menuBarWidth
 
     var body: some View {
         ScrollView {
@@ -204,13 +204,13 @@ struct SettingsView: View {
                     VStack(spacing: 0) {
                         SettingsRow("Lyrics Width") {
                             HStack(spacing: 10) {
-                                Slider(value: $tickerWidth, in: 120...320, step: 10)
+                                Slider(value: $menuBarWidth, in: 120...320, step: 10)
                                     .frame(width: 150)
-                                    .onChange(of: tickerWidth) { _, val in
-                                        AppSettings.shared.tickerWidth = val
-                                        NotificationCenter.default.post(name: .tickerWidthChanged, object: nil)
+                                    .onChange(of: menuBarWidth) { _, val in
+                                        AppSettings.shared.menuBarWidth = val
+                                        NotificationCenter.default.post(name: .menuBarWidthChanged, object: nil)
                                     }
-                                Text("\(Int(tickerWidth)) pt")
+                                Text("\(Int(menuBarWidth)) pt")
                                     .font(.system(.body, design: .monospaced))
                                     .foregroundStyle(.secondary)
                                     .frame(width: 50, alignment: .trailing)
@@ -232,5 +232,5 @@ struct SettingsView: View {
 }
 
 extension Notification.Name {
-    static let tickerWidthChanged = Notification.Name("tickerWidthChanged")
+    static let menuBarWidthChanged = Notification.Name("menuBarWidthChanged")
 }

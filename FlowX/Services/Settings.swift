@@ -48,14 +48,14 @@ final class AppSettings {
 
     // MARK: - UI Config
 
-    var tickerWidth: Double {
-        get { data["tickerWidth"] as? Double ?? 180 }
-        set { data["tickerWidth"] = newValue; save() }
+    var menuBarWidth: Double {
+        get { data["menuBarWidth"] as? Double ?? 180 }
+        set { data["menuBarWidth"] = newValue; save() }
     }
 
-    var showLyrics: Bool {
-        get { data["showLyrics"] as? Bool ?? true }
-        set { data["showLyrics"] = newValue; save() }
+    var showMenuBarLyrics: Bool {
+        get { data["showMenuBarLyrics"] as? Bool ?? true }
+        set { data["showMenuBarLyrics"] = newValue; save() }
     }
 
     // MARK: - Persistence
