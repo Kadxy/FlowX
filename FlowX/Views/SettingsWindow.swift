@@ -6,7 +6,7 @@ final class SettingsWindowController: NSWindowController {
 
     private init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 460, height: 240),
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: 480),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -14,9 +14,9 @@ final class SettingsWindowController: NSWindowController {
         window.title = "FlowX Settings"
         window.center()
         window.isReleasedWhenClosed = false
-        window.setContentSize(NSSize(width: 460, height: 240))
-        window.minSize = NSSize(width: 460, height: 240)
-        window.maxSize = NSSize(width: 460, height: 240)
+        window.setContentSize(NSSize(width: 520, height: 480))
+        window.minSize = NSSize(width: 520, height: 480)
+        window.maxSize = NSSize(width: 520, height: 480)
         window.contentView = NSHostingView(rootView: SettingsView())
         super.init(window: window)
     }
@@ -26,8 +26,99 @@ final class SettingsWindowController: NSWindowController {
     override func showWindow(_ sender: Any?) {
         window?.center()
         window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 }
+
+// MARK: - Char-wrap NSTextView
+
+struct CharWrapTextView: NSViewRepresentable {
+    @Binding var text: String
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSTextView.scrollableTextView()
+        let textView = scrollView.documentView as! NSTextView
+
+        textView.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        textView.isRichText = false
+        textView.isAutomaticQuoteSubstitutionEnabled = false
+        textView.isAutomaticDashSubstitutionEnabled = false
+        textView.isAutomaticTextReplacementEnabled = false
+        textView.textContainerInset = NSSize(width: 6, height: 6)
+        textView.delegate = context.coordinator
+        textView.drawsBackground = false
+
+        textView.textContainer?.lineBreakMode = .byCharWrapping
+        textView.textContainer?.widthTracksTextView = true
+        textView.isHorizontallyResizable = false
+
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = false
+        scrollView.borderType = .noBorder
+        scrollView.scrollerStyle = .overlay
+        scrollView.drawsBackground = false
+
+        textView.string = text
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        let textView = scrollView.documentView as! NSTextView
+        if textView.string != text {
+            textView.string = text
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    class Coordinator: NSObject, NSTextViewDelegate {
+        let parent: CharWrapTextView
+        init(_ parent: CharWrapTextView) { self.parent = parent }
+
+        func textDidChange(_ notification: Notification) {
+            guard let textView = notification.object as? NSTextView else { return }
+            parent.text = textView.string
+        }
+    }
+}
+
+// MARK: - Card Style
+
+private struct CardModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .padding(16)
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+private extension View {
+    func card() -> some View { modifier(CardModifier()) }
+}
+
+// MARK: - Row
+
+private struct SettingsRow<Content: View>: View {
+    let label: String
+    let content: () -> Content
+
+    init(_ label: String, @ViewBuilder content: @escaping () -> Content) {
+        self.label = label
+        self.content = content
+    }
+
+    var body: some View {
+        HStack {
+            Text(label).foregroundStyle(.primary)
+            Spacer()
+            content()
+        }
+    }
+}
+
+// MARK: - Settings View
+
+private let storefronts = ["cn", "us", "jp"]
 
 struct SettingsView: View {
     @State private var userToken: String = AppSettings.shared.userToken
@@ -35,50 +126,91 @@ struct SettingsView: View {
     @State private var tickerWidth: Double = AppSettings.shared.tickerWidth
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("FlowX Settings")
-                .font(.title3)
-                .fontWeight(.semibold)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
 
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 12) {
-                    Text("User Token")
-                        .frame(width: 80, alignment: .trailing)
-                    SecureField("media-user-token", text: $userToken)
-                        .textFieldStyle(.roundedBorder)
-                        .onChange(of: userToken) { _, newValue in
-                            AppSettings.shared.userToken = newValue
-                        }
-                }
-
-                HStack(spacing: 12) {
-                    Text("Storefront")
-                        .frame(width: 80, alignment: .trailing)
-                    TextField("e.g. cn, us, jp", text: $storefront)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 120)
-                        .onChange(of: storefront) { _, newValue in
-                            AppSettings.shared.storefront = newValue
-                        }
-                }
-
-                HStack(spacing: 12) {
-                    Text("Lyrics Width")
-                        .frame(width: 80, alignment: .trailing)
-                    Slider(value: $tickerWidth, in: 120...400, step: 10)
-                        .onChange(of: tickerWidth) { _, newValue in
-                            AppSettings.shared.tickerWidth = newValue
-                            NotificationCenter.default.post(name: .tickerWidthChanged, object: nil)
-                        }
-                    Text("\(Int(tickerWidth))px")
-                        .monospacedDigit()
+                // MARK: Apple Music API
+                VStack(alignment: .leading, spacing: 10) {
+                    Label("Apple Music API", systemImage: "apple.logo")
+                        .font(.system(.subheadline, weight: .semibold))
                         .foregroundStyle(.secondary)
-                        .frame(width: 45, alignment: .trailing)
+                        .padding(.leading, 4)
+
+                    VStack(spacing: 0) {
+                        // User Token
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("User Token")
+                                .font(.system(.body, weight: .medium))
+                            CharWrapTextView(text: $userToken)
+                                .frame(height: 80)
+                                .background(
+                                    Color.primary.opacity(0.04),
+                                    in: RoundedRectangle(cornerRadius: 6)
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+                                )
+                                .onChange(of: userToken) { _, val in
+                                    AppSettings.shared.userToken = val
+                                }
+                        }
+                        .padding(16)
+
+                        Divider().padding(.horizontal, 16)
+
+                        // Storefront
+                        SettingsRow("Storefront") {
+                            Picker("", selection: $storefront) {
+                                ForEach(storefronts, id: \.self) { code in
+                                    Text(code.uppercased()).tag(code)
+                                }
+                            }
+                            .labelsHidden()
+                            .frame(width: 90)
+                            .onChange(of: storefront) { _, val in
+                                AppSettings.shared.storefront = val
+                            }
+                        }
+                        .padding(16)
+                    }
+                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10))
                 }
+
+                // MARK: Appearance
+                VStack(alignment: .leading, spacing: 10) {
+                    Label("Appearance", systemImage: "paintbrush")
+                        .font(.system(.subheadline, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.leading, 4)
+
+                    VStack(spacing: 0) {
+                        SettingsRow("Lyrics Width") {
+                            HStack(spacing: 10) {
+                                Slider(value: $tickerWidth, in: 120...400, step: 10)
+                                    .frame(width: 180)
+                                    .onChange(of: tickerWidth) { _, val in
+                                        AppSettings.shared.tickerWidth = val
+                                        NotificationCenter.default.post(name: .tickerWidthChanged, object: nil)
+                                    }
+                                Text("\(Int(tickerWidth)) pt")
+                                    .font(.system(.body, design: .monospaced))
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 50, alignment: .trailing)
+                            }
+                        }
+                        .padding(16)
+                    }
+                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10))
+                }
+
+                Spacer()
             }
+            .padding(24)
         }
-        .padding(20)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .onTapGesture {
+            NSApp.keyWindow?.makeFirstResponder(nil)
+        }
     }
 }
 
