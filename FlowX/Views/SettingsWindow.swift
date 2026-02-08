@@ -136,11 +136,18 @@ private struct SettingsRow<Content: View>: View {
 // MARK: - Settings View
 
 private let storefronts = ["cn", "us", "jp"]
-private let languages: [(code: String, label: String)] = [
-    ("system", "System"),
-    ("en", "English"),
-    ("zh-Hans", "简体中文")
-]
+private let languages: [(code: String, label: String)] = {
+    var list = Bundle.main.localizations
+        .filter { $0 != "Base" }
+        .map { code -> (code: String, label: String) in
+            let locale = Locale(identifier: code)
+            let name = locale.localizedString(forIdentifier: code) ?? code
+            return (code, name.prefix(1).uppercased() + name.dropFirst())
+        }
+        .sorted { $0.label.localizedCompare($1.label) == .orderedAscending }
+    list.insert(("system", "System"), at: 0)
+    return list
+}()
 
 struct SettingsView: View {
     @State private var userToken: String = AppSettings.shared.userToken
