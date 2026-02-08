@@ -337,11 +337,8 @@ final class MenuBarLyricsView: NSView {
         ctx.scaleBy(x: scale, y: scale)
 
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            var color: NSColor = .labelColor
-            if let dimAlpha {
-                color = NSColor(cgColor: NSColor.labelColor.cgColor)?.withAlphaComponent(dimAlpha)
-                    ?? .labelColor
-            }
+            let resolved = NSColor(cgColor: NSColor.labelColor.cgColor) ?? .labelColor
+            let color = resolved.withAlphaComponent(dimAlpha ?? 1.0)
             let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
             (currentText as NSString).draw(at: .zero, withAttributes: attrs)
         }

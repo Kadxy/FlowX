@@ -10,8 +10,8 @@ final class MusicController: ObservableObject {
     @Published private(set) var currentTrack: TrackInfo = .empty
     @Published private(set) var isMusicRunning: Bool = false
     @Published private(set) var currentLyricLine: String = ""
-    @Published private(set) var currentLine: LyricLine?
-    @Published private(set) var currentLineIndex: Int = -1
+    private(set) var currentLine: LyricLine?
+    private(set) var currentLineIndex: Int = -1
     @Published private(set) var hasLyrics: Bool = false
 
     private(set) var playerPosition: TimeInterval = 0
@@ -120,7 +120,8 @@ final class MusicController: ObservableObject {
     // MARK: - Position polling (only active when playing)
 
     private func pollPosition() {
-        guard isMusicRunning, playerState == .playing else { return }
+        guard isMusicRunning, playerState == .playing,
+              AppSettings.shared.showMenuBarLyrics else { return }
 
         playerPosition = musicApp.playerPosition
         updateCurrentLyric()
@@ -164,6 +165,7 @@ final class MusicController: ObservableObject {
         lastActiveIndex = -1
         lastWasInterlude = false
 
+        guard AppSettings.shared.showMenuBarLyrics else { return }
         let track = currentTrack
         Task {
             let lines = await amLyrics.fetchLyrics(
