@@ -20,8 +20,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var menu = makeMenu()
     private var menuBarLyricsItem: NSMenuItem!
 
-    private var menuBarWidth: CGFloat {
-        CGFloat(AppSettings.shared.menuBarWidth)
+    private var menuBarLyricsWidth: CGFloat {
+        CGFloat(AppSettings.shared.menuBarLyricsWidth)
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -37,7 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         logoItem.button?.sendAction(on: [.leftMouseUp])
 
         // Lyrics item — display only, created second so it appears to the left
-        let w = menuBarWidth
+        let w = menuBarLyricsWidth
         lyricsItem = NSStatusBar.system.statusItem(withLength: w)
         lyricsItem.button?.sendAction(on: [])
 
@@ -52,8 +52,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updateMenuBar()
 
         NotificationCenter.default.addObserver(
-            self, selector: #selector(onMenuBarWidthChanged),
-            name: .menuBarWidthChanged, object: nil
+            self, selector: #selector(onMenuBarLyricsWidthChanged),
+            name: .menuBarLyricsWidthChanged, object: nil
         )
 
         mc.$currentLyricLine.removeDuplicates().receive(on: DispatchQueue.main)
@@ -79,20 +79,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func makeMenu() -> NSMenu {
         let menu = NSMenu()
 
-        menuBarLyricsItem = NSMenuItem(title: "Menu Bar Lyrics", action: #selector(toggleMenuBarLyrics), keyEquivalent: "")
+        menuBarLyricsItem = NSMenuItem(title: String(localized: "Menu Bar Lyrics"), action: #selector(toggleMenuBarLyrics), keyEquivalent: "")
         menuBarLyricsItem.target = self
         menuBarLyricsItem.image = NSImage(systemSymbolName: "text.quote", accessibilityDescription: nil)
         menuBarLyricsItem.state = AppSettings.shared.showMenuBarLyrics ? .on : .off
         menu.addItem(menuBarLyricsItem)
 
-        let settingsItem = NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ",")
+        let settingsItem = NSMenuItem(title: String(localized: "Settings..."), action: #selector(openSettings), keyEquivalent: ",")
         settingsItem.target = self
         settingsItem.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: nil)
         menu.addItem(settingsItem)
 
         menu.addItem(NSMenuItem.separator())
 
-        let quitItem = NSMenuItem(title: "Quit FlowX", action: #selector(quitApp), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: String(localized: "Quit FlowX"), action: #selector(quitApp), keyEquivalent: "q")
         quitItem.target = self
         quitItem.image = NSImage(systemSymbolName: "power", accessibilityDescription: nil)
         menu.addItem(quitItem)
@@ -119,15 +119,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.terminate(nil)
     }
 
-    @objc private func onMenuBarWidthChanged() {
-        let w = menuBarWidth
+    @objc private func onMenuBarLyricsWidthChanged() {
+        let w = menuBarLyricsWidth
         lyricsItem.length = w
         lyricsView.frame = NSRect(x: 0, y: 0, width: w, height: 22)
     }
 
     private func updateMenuBar() {
         guard mc.isMusicRunning, !mc.currentTrack.title.isEmpty else {
-            lyricsView.text = "♪ Not Playing"
+            lyricsView.text = String(localized: "♪ Not Playing")
             return
         }
 

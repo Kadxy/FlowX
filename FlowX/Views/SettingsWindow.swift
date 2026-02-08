@@ -11,7 +11,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = "FlowX Settings"
+        window.title = String(localized: "FlowX Settings")
         window.center()
         window.isReleasedWhenClosed = false
         window.collectionBehavior = [.managed, .participatesInCycle]
@@ -116,10 +116,10 @@ private extension View {
 // MARK: - Row
 
 private struct SettingsRow<Content: View>: View {
-    let label: String
+    let label: LocalizedStringKey
     let content: () -> Content
 
-    init(_ label: String, @ViewBuilder content: @escaping () -> Content) {
+    init(_ label: LocalizedStringKey, @ViewBuilder content: @escaping () -> Content) {
         self.label = label
         self.content = content
     }
@@ -136,11 +136,18 @@ private struct SettingsRow<Content: View>: View {
 // MARK: - Settings View
 
 private let storefronts = ["cn", "us", "jp"]
+private let languages: [(code: String, label: String)] = [
+    ("system", "System"),
+    ("en", "English"),
+    ("zh-Hans", "简体中文")
+]
 
 struct SettingsView: View {
     @State private var userToken: String = AppSettings.shared.userToken
     @State private var storefront: String = AppSettings.shared.storefront
-    @State private var menuBarWidth: Double = AppSettings.shared.menuBarWidth
+    @State private var menuBarLyricsWidth: Double = AppSettings.shared.menuBarLyricsWidth
+    @State private var language: String = AppSettings.shared.language
+    @State private var showRestartAlert = false
 
     var body: some View {
         ScrollView {
@@ -202,18 +209,35 @@ struct SettingsView: View {
                         .padding(.leading, 4)
 
                     VStack(spacing: 0) {
-                        SettingsRow("Lyrics Width") {
+                        SettingsRow("MenuBar Lyrics Width") {
                             HStack(spacing: 10) {
-                                Slider(value: $menuBarWidth, in: 120...320, step: 10)
+                                Slider(value: $menuBarLyricsWidth, in: 120...320, step: 10)
                                     .frame(width: 150)
-                                    .onChange(of: menuBarWidth) { _, val in
-                                        AppSettings.shared.menuBarWidth = val
-                                        NotificationCenter.default.post(name: .menuBarWidthChanged, object: nil)
+                                    .onChange(of: menuBarLyricsWidth) { _, val in
+                                        AppSettings.shared.menuBarLyricsWidth = val
+                                        NotificationCenter.default.post(name: .menuBarLyricsWidthChanged, object: nil)
                                     }
-                                Text("\(Int(menuBarWidth)) pt")
+                                Text("\(Int(menuBarLyricsWidth)) pt")
                                     .font(.system(.body, design: .monospaced))
                                     .foregroundStyle(.secondary)
                                     .frame(width: 50, alignment: .trailing)
+                            }
+                        }
+                        .padding(16)
+
+                        Divider().padding(.horizontal, 16)
+
+                        SettingsRow("Language") {
+                            Picker("", selection: $language) {
+                                ForEach(languages, id: \.code) { lang in
+                                    Text(lang.label).tag(lang.code)
+                                }
+                            }
+                            .labelsHidden()
+                            .frame(width: 130)
+                            .onChange(of: language) { _, val in
+                                AppSettings.shared.language = val
+                                showRestartAlert = true
                             }
                         }
                         .padding(16)
@@ -228,9 +252,24 @@ struct SettingsView: View {
         .onTapGesture {
             NSApp.keyWindow?.makeFirstResponder(nil)
         }
+        .alert("Restart Required", isPresented: $showRestartAlert) {
+            Button("Restart Now") {
+                restartApp()
+            }
+            Button("Later", role: .cancel) {}
+        } message: {
+            Text("Language changed. Restart FlowX to apply.")
+        }
+    }
+
+    private func restartApp() {
+        let url = URL(fileURLWithPath: Bundle.main.resourcePath!)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        NSWorkspace.shared.openApplication(at: url, configuration: .init())
+        NSApp.terminate(nil)
     }
 }
 
 extension Notification.Name {
-    static let menuBarWidthChanged = Notification.Name("menuBarWidthChanged")
+    static let menuBarLyricsWidthChanged = Notification.Name("menuBarLyricsWidthChanged")
 }

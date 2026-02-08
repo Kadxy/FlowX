@@ -25,6 +25,8 @@ final class AppSettings {
             data = [:]
         }
 
+        applyLanguage()
+
         // Auto-refresh developer token in background
         Task { await refreshDeveloperToken() }
     }
@@ -48,14 +50,34 @@ final class AppSettings {
 
     // MARK: - UI Config
 
-    var menuBarWidth: Double {
-        get { data["menuBarWidth"] as? Double ?? 180 }
-        set { data["menuBarWidth"] = newValue; save() }
+    var menuBarLyricsWidth: Double {
+        get { data["menuBarLyricsWidth"] as? Double ?? 180 }
+        set { data["menuBarLyricsWidth"] = newValue; save() }
     }
 
     var showMenuBarLyrics: Bool {
         get { data["showMenuBarLyrics"] as? Bool ?? true }
         set { data["showMenuBarLyrics"] = newValue; save() }
+    }
+
+    /// "system", "en", or "zh-Hans"
+    var language: String {
+        get { data["language"] as? String ?? "system" }
+        set {
+            data["language"] = newValue
+            save()
+            applyLanguage()
+        }
+    }
+
+    /// Set AppleLanguages override based on current language setting.
+    /// Must be called before any localized strings are loaded.
+    func applyLanguage() {
+        if language == "system" {
+            UserDefaults.standard.removeObject(forKey: "AppleLanguages")
+        } else {
+            UserDefaults.standard.set([language], forKey: "AppleLanguages")
+        }
     }
 
     // MARK: - Persistence
