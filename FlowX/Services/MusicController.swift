@@ -137,10 +137,11 @@ final class MusicController: ObservableObject {
         playerState = mapPlayerState(rawState)
         playerPosition = musicApp.playerPosition
 
-        if let track = musicApp.currentTrack {
+        if let track = musicApp.currentTrack,
+           let name = track.name, !name.isEmpty {
             currentTrack = TrackInfo(
-                title: track.name ?? "Unknown",
-                artist: track.artist ?? "Unknown",
+                title: name,
+                artist: track.artist ?? "",
                 album: track.album ?? "",
                 duration: track.duration,
                 persistentID: track.persistentID ?? "",

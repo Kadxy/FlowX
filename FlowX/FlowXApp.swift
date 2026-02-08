@@ -89,6 +89,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func makeMenu() -> NSMenu {
         let menu = NSMenu()
+        menu.autoenablesItems = false
 
         openInMusicItem = NSMenuItem(title: String(localized: "Open in Apple Music"), action: #selector(openInMusic), keyEquivalent: "")
         openInMusicItem.target = self
@@ -150,7 +151,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func updateLyricsMenuItems() {
-        let hasTrack = mc.isMusicRunning && !mc.currentTrack.title.isEmpty
+        let hasTrack = mc.isMusicRunning && mc.playerState != .stopped && !mc.currentTrack.title.isEmpty
         let hasCachedFile = hasTrack && mc.cachedLyricsFileURL() != nil
         openInMusicItem.isEnabled = hasTrack
         viewLyricsFileItem.isEnabled = hasCachedFile
@@ -211,7 +212,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let trackLabel = "\(mc.currentTrack.title) - \(mc.currentTrack.artist)"
+        let track = mc.currentTrack
+        let trackLabel = track.artist.isEmpty ? track.title : "\(track.title) - \(track.artist)"
 
         if mc.hasLyrics, !mc.currentLyricLine.isEmpty {
             lyricsView.text = mc.currentLyricLine
