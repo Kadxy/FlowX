@@ -3,11 +3,18 @@ import os
 
 private let logger = Logger(subsystem: "com.kadxy.FlowX", category: "Lyrics")
 
+struct CatalogSong {
+    let id: String
+    let name: String
+    let artist: String
+    let duration: TimeInterval
+}
+
 final class LyricsService {
     private let session: URLSession
     private var settings: AppSettings { AppSettings.shared }
 
-    private static let cacheDir: URL = {
+    static let cacheDir: URL = {
         let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("FlowX/lyrics", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -55,7 +62,7 @@ final class LyricsService {
 
     // MARK: - Catalog Search
 
-    private func searchCatalog(name: String, artist: String, duration: TimeInterval) async -> String? {
+    func searchCatalogResults(name: String, artist: String) async -> [CatalogSong] {
         var c = URLComponents(string: "https://amp-api.music.apple.com/v1/catalog/\(settings.storefront)/search")
         c?.queryItems = [
             URLQueryItem(name: "term", value: "\(name) \(artist)"),
@@ -63,7 +70,7 @@ final class LyricsService {
             URLQueryItem(name: "limit", value: "10"),
             URLQueryItem(name: "l", value: "zh-Hans-CN")
         ]
-        guard let url = c?.url, let data = await apiRequest(url: url) else { return nil }
+        guard let url = c?.url, let data = await apiRequest(url: url) else { return [] }
 
         do {
             let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
@@ -73,45 +80,53 @@ final class LyricsService {
 
             logger.info("  Catalog search returned \(songData.count) songs")
 
-            var bestId: String?
-            var bestDiff = Double.infinity
-            var bestExact = false
-
-            for song in songData {
+            return songData.compactMap { song in
                 let id = song["id"] as? String ?? ""
                 let attrs = song["attributes"] as? [String: Any] ?? [:]
                 let durationMs = attrs["durationInMillis"] as? Double ?? 0
-                let songDur = durationMs / 1000.0
-                let diff = abs(songDur - duration)
                 let songName = attrs["name"] as? String ?? ""
                 let songArtist = attrs["artistName"] as? String ?? ""
-                let isExactTitle = songName == name
-
-                let durStr = String(format: "%.1f", songDur)
-                let diffStr = String(format: "%.1f", diff)
-                let exact = isExactTitle ? " ✓exact" : ""
-                logger.info("  [\(id)] '\(songName)' by '\(songArtist)', dur=\(durStr)s (Δ\(diffStr)s)\(exact)")
-
-                // 优先标题精确匹配，其次 duration 最接近
-                let dominated: Bool
-                if isExactTitle != bestExact {
-                    dominated = isExactTitle  // 精确标题优先
-                } else {
-                    dominated = diff < bestDiff
-                }
-                if dominated {
-                    bestDiff = diff
-                    bestId = id
-                    bestExact = isExactTitle
-                }
+                guard !id.isEmpty else { return nil }
+                return CatalogSong(id: id, name: songName, artist: songArtist, duration: durationMs / 1000.0)
             }
-
-            if bestDiff < 5, let id = bestId { return id }
-            return songData.first?["id"] as? String
         } catch {
             logger.info("  Catalog search parse error: \(error)")
-            return nil
+            return []
         }
+    }
+
+    private func searchCatalog(name: String, artist: String, duration: TimeInterval) async -> String? {
+        let results = await searchCatalogResults(name: name, artist: artist)
+        guard !results.isEmpty else { return nil }
+
+        var bestId: String?
+        var bestDiff = Double.infinity
+        var bestExact = false
+
+        for song in results {
+            let diff = abs(song.duration - duration)
+            let isExactTitle = song.name == name
+
+            let durStr = String(format: "%.1f", song.duration)
+            let diffStr = String(format: "%.1f", diff)
+            let exact = isExactTitle ? " ✓exact" : ""
+            logger.info("  [\(song.id)] '\(song.name)' by '\(song.artist)', dur=\(durStr)s (Δ\(diffStr)s)\(exact)")
+
+            let dominated: Bool
+            if isExactTitle != bestExact {
+                dominated = isExactTitle
+            } else {
+                dominated = diff < bestDiff
+            }
+            if dominated {
+                bestDiff = diff
+                bestId = song.id
+                bestExact = isExactTitle
+            }
+        }
+
+        if bestDiff < 5, let id = bestId { return id }
+        return results.first?.id
     }
 
     // MARK: - Fetch syllable lyrics
@@ -148,6 +163,33 @@ final class LyricsService {
     }
 
     // MARK: - Disk Cache (filename: {persistentID}-{catalogSongId}.ttml)
+
+    func cachedFileURL(persistentID: String) -> URL? {
+        guard let cached = findCachedFile(persistentID: persistentID) else { return nil }
+        let filename = "\(persistentID)-\(cached.catalogId).ttml"
+        return Self.cacheDir.appendingPathComponent(filename)
+    }
+
+    func deleteCachedFile(persistentID: String) {
+        guard let files = try? FileManager.default.contentsOfDirectory(atPath: Self.cacheDir.path) else { return }
+        for file in files where file.hasPrefix("\(persistentID)-") && file.hasSuffix(".ttml") {
+            try? FileManager.default.removeItem(at: Self.cacheDir.appendingPathComponent(file))
+            logger.info("Deleted cache: \(file)")
+        }
+    }
+
+    func fetchAndCacheLyrics(songId: String, persistentID: String) async -> [LyricLine]? {
+        guard let ttml = await fetchSyllableLyrics(songId: songId) else {
+            logger.info("✗ No lyrics for songId \(songId)")
+            return nil
+        }
+        if !persistentID.isEmpty {
+            deleteCachedFile(persistentID: persistentID)
+            saveTTMLToDisk(ttml: ttml, persistentID: persistentID, catalogId: songId)
+        }
+        let lines = TTMLParser.parse(ttml)
+        return lines.isEmpty ? nil : lines
+    }
 
     private func findCachedFile(persistentID: String) -> (ttml: String, catalogId: String)? {
         guard let files = try? FileManager.default.contentsOfDirectory(atPath: Self.cacheDir.path) else { return nil }

@@ -233,6 +233,9 @@
         }
       }
     },
+    "Clear Cache & Reload" : {
+
+    },
     "Coming Soon" : {
       "localizations" : {
         "de" : {
@@ -813,6 +816,9 @@
         }
       }
     },
+    "No Results" : {
+
+    },
     "Quit FlowX" : {
       "localizations" : {
         "de" : {
@@ -987,6 +993,12 @@
         }
       }
     },
+    "Searching..." : {
+
+    },
+    "Select Lyrics..." : {
+
+    },
     "Settings..." : {
       "localizations" : {
         "de" : {
@@ -1160,6 +1172,9 @@
           }
         }
       }
+    },
+    "View Lyrics File" : {
+
     }
   },
   "version" : "1.0"

@@ -261,4 +261,80 @@ final class MusicController: ObservableObject {
     func playPause() { musicApp.playpause() }
     func nextTrack() { musicApp.nextTrack() }
     func previousTrack() { musicApp.previousTrack() }
+
+    // MARK: - Lyrics management (menu actions)
+
+    func cachedLyricsFileURL() -> URL? {
+        let pid = currentTrack.persistentID
+        guard !pid.isEmpty else { return nil }
+        return amLyrics.cachedFileURL(persistentID: pid)
+    }
+
+    func refetchLyrics() {
+        let track = currentTrack
+        guard !track.persistentID.isEmpty, !track.title.isEmpty else { return }
+
+        Task {
+            // Fetch fresh lyrics (search → best match → download TTML)
+            let results = await amLyrics.searchCatalogResults(name: track.title, artist: track.artist)
+            guard !results.isEmpty else { return }
+
+            // Pick best match: exact title first, then closest duration
+            var bestId = results[0].id
+            var bestDiff = abs(results[0].duration - track.duration)
+            var bestExact = results[0].name == track.title
+            for song in results.dropFirst() {
+                let diff = abs(song.duration - track.duration)
+                let exact = song.name == track.title
+                if exact != bestExact ? exact : diff < bestDiff {
+                    bestId = song.id; bestDiff = diff; bestExact = exact
+                }
+            }
+
+            // fetchAndCacheLyrics deletes old cache before saving new one
+            let lines = await amLyrics.fetchAndCacheLyrics(songId: bestId, persistentID: track.persistentID)
+            await MainActor.run {
+                guard self.currentTrack.identity == track.identity else { return }
+                self.lastFetchedTrackIdentity = track.identity
+                if let lines, !lines.isEmpty {
+                    self.lyrics = lines
+                    self.hasLyrics = lines.contains { $0.time > 0 }
+                    self.lastActiveIndex = -1
+                    self.lastWasInterlude = false
+                    self.updateCurrentLyric()
+                }
+            }
+        }
+    }
+
+    func searchCatalogResults() async -> [CatalogSong] {
+        let track = currentTrack
+        guard !track.title.isEmpty else { return [] }
+        return await amLyrics.searchCatalogResults(name: track.title, artist: track.artist)
+    }
+
+    func selectLyrics(songId: String) {
+        let track = currentTrack
+        guard !track.persistentID.isEmpty else { return }
+        Task {
+            let lines = await amLyrics.fetchAndCacheLyrics(songId: songId, persistentID: track.persistentID)
+            await MainActor.run {
+                guard self.currentTrack.identity == track.identity else { return }
+                self.lastFetchedTrackIdentity = track.identity
+                if let lines, !lines.isEmpty {
+                    self.lyrics = lines
+                    self.hasLyrics = lines.contains { $0.time > 0 }
+                    self.lastActiveIndex = -1
+                    self.lastWasInterlude = false
+                    self.updateCurrentLyric()
+                } else {
+                    self.lyrics = []
+                    self.hasLyrics = false
+                    self.currentLyricLine = ""
+                    self.currentLine = nil
+                    self.currentLineIndex = -1
+                }
+            }
+        }
+    }
 }

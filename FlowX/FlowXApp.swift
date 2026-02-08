@@ -19,6 +19,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var cancellables = Set<AnyCancellable>()
     private lazy var menu = makeMenu()
     private var menuBarLyricsItem: NSMenuItem!
+    private var viewLyricsFileItem: NSMenuItem!
+    private var clearCacheItem: NSMenuItem!
+    private var selectLyricsItem: NSMenuItem!
+    private var selectLyricsSubmenu: NSMenu!
 
     private var menuBarLyricsWidth: CGFloat {
         CGFloat(AppSettings.shared.menuBarLyricsWidth)
@@ -75,7 +79,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func logoClicked() {
         guard let button = logoItem.button else { return }
-        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 5), in: button)
+        let m = menu // trigger lazy init before updating items
+        updateLyricsMenuItems()
+        m.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 5), in: button)
         // Refresh after menu closes (RunLoop was blocked during tracking)
         updateMenuBar()
     }
@@ -88,6 +94,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBarLyricsItem.image = NSImage(systemSymbolName: "text.quote", accessibilityDescription: nil)
         menuBarLyricsItem.state = AppSettings.shared.showMenuBarLyrics ? .on : .off
         menu.addItem(menuBarLyricsItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        viewLyricsFileItem = NSMenuItem(title: String(localized: "View Lyrics File"), action: #selector(viewLyricsFile), keyEquivalent: "")
+        viewLyricsFileItem.target = self
+        viewLyricsFileItem.image = NSImage(systemSymbolName: "doc.text", accessibilityDescription: nil)
+        menu.addItem(viewLyricsFileItem)
+
+        clearCacheItem = NSMenuItem(title: String(localized: "Clear Cache & Reload"), action: #selector(clearCacheAndReload), keyEquivalent: "")
+        clearCacheItem.target = self
+        clearCacheItem.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: nil)
+        menu.addItem(clearCacheItem)
+
+        selectLyricsItem = NSMenuItem(title: String(localized: "Select Lyrics..."), action: nil, keyEquivalent: "")
+        selectLyricsItem.image = NSImage(systemSymbolName: "text.magnifyingglass", accessibilityDescription: nil)
+        selectLyricsSubmenu = NSMenu()
+        selectLyricsSubmenu.delegate = self
+        selectLyricsItem.submenu = selectLyricsSubmenu
+        menu.addItem(selectLyricsItem)
+
+        menu.addItem(NSMenuItem.separator())
 
         let settingsItem = NSMenuItem(title: String(localized: "Settings..."), action: #selector(openSettings), keyEquivalent: ",")
         settingsItem.target = self
@@ -104,11 +131,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return menu
     }
 
+    private func updateLyricsMenuItems() {
+        let hasTrack = mc.isMusicRunning && !mc.currentTrack.title.isEmpty
+        let hasCachedFile = hasTrack && mc.cachedLyricsFileURL() != nil
+        viewLyricsFileItem.isEnabled = hasCachedFile
+        clearCacheItem.isEnabled = hasCachedFile
+        selectLyricsItem.isEnabled = hasTrack
+    }
+
     @objc private func toggleMenuBarLyrics() {
         let newValue = !AppSettings.shared.showMenuBarLyrics
         AppSettings.shared.showMenuBarLyrics = newValue
         menuBarLyricsItem.state = newValue ? .on : .off
         applyMenuBarVisibility()
+    }
+
+    @objc private func viewLyricsFile() {
+        guard let url = mc.cachedLyricsFileURL() else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
+    @objc private func clearCacheAndReload() {
+        mc.refetchLyrics()
+    }
+
+    @objc private func selectLyricsResult(_ sender: NSMenuItem) {
+        guard let songId = sender.representedObject as? String else { return }
+        mc.selectLyrics(songId: songId)
     }
 
     private func applyMenuBarVisibility() {
@@ -148,5 +197,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         lyricsView.isPlaying = mc.playerState.isPlaying
+    }
+}
+
+// MARK: - NSMenuDelegate (lazy-load search results for "Select Lyrics..." submenu)
+
+extension AppDelegate: NSMenuDelegate {
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        guard menu === selectLyricsSubmenu else { return }
+
+        menu.removeAllItems()
+        let loadingItem = NSMenuItem(title: String(localized: "Searching..."), action: nil, keyEquivalent: "")
+        loadingItem.isEnabled = false
+        menu.addItem(loadingItem)
+
+        Task {
+            let results = await mc.searchCatalogResults()
+            await MainActor.run {
+                menu.removeAllItems()
+                if results.isEmpty {
+                    let emptyItem = NSMenuItem(title: String(localized: "No Results"), action: nil, keyEquivalent: "")
+                    emptyItem.isEnabled = false
+                    menu.addItem(emptyItem)
+                    return
+                }
+                for song in results {
+                    let durStr = Self.formatDuration(song.duration)
+                    let title = "\(song.name) - \(song.artist)  (\(durStr))"
+                    let item = NSMenuItem(title: title, action: #selector(self.selectLyricsResult(_:)), keyEquivalent: "")
+                    item.target = self
+                    item.representedObject = song.id
+                    menu.addItem(item)
+                }
+            }
+        }
+    }
+
+    private static func formatDuration(_ seconds: TimeInterval) -> String {
+        let m = Int(seconds) / 60
+        let s = Int(seconds) % 60
+        return String(format: "%d:%02d", m, s)
     }
 }
