@@ -6,23 +6,39 @@
 
 ## Project Overview
 
-**Name:** NotchX (MVP Phase)
-**Type:** macOS Menu Bar Application
-**Goal:** A minimalist, native macOS controller exclusively for **Apple Music**.
-**Key Features:**
+**Name:** FlowX (formerly NotchX)
+**Type:** macOS Menu Bar Application (LSUIElement, no Dock icon)
+**Goal:** A minimalist, native macOS status bar lyrics viewer and controller exclusively for **Apple Music**.
 
-1. **Playback Control:** Play/Pause, Next, Previous.
-2. **Library Action:** Like (Love) / Dislike (Unlove) current track.
-3. **Lyrics:** Fetch **synced lyrics** from **LRCLIB API**.
-4. **UI:** Simple Menu Bar dropdown (or floating window) displaying current track and scrolling lyrics.
-5. **Config:** Zero configuration. No user settings for the MVP.
+## Architecture
+
+```text
+FlowX/
+├── Bridge/            # ScriptingBridge (Music.h, generated from Music.app sdef)
+├── Models/            # TrackInfo, LyricLine, PlayerState
+├── Services/
+│   ├── MusicController.swift    # Singleton, polls Apple Music via ScriptingBridge
+│   ├── LyricsService.swift        # Catalog search → TTML fetch → disk cache
+│   └── TTMLParser.swift         # TTML XML → [LyricLine]
+└── Views/
+    ├── TickerView.swift         # Scrolling lyrics/track info in status bar
+    ├── LogoView.swift           # Status bar icon
+    └── SettingsWindow.swift     # Ticker width config
+```
+
+## Key Technical Decisions
+
+- **ScriptingBridge** controls Apple Music; `persistentID` (local hex ID) used as cache key
+- **No catalog songId from ScriptingBridge** — must search Apple Music API to resolve
+- **Search strategy:** Library search first (`/v1/me/library/search`), fallback to catalog search
+- **TTML cache:** `~/Library/Caches/FlowX/lyrics/{persistentID}-{catalogSongId}.ttml`
+- **Tokens** loaded from `.env` file (gitignored): `DEVELOPER_TOKEN`, `USER_TOKEN`, `STOREFRONT`
+- **Sandbox disabled** — required for ScriptingBridge to work
 
 ## Tech Stack
 
-- **Platform:** macOS (Target: macOS 14.0+)
-- **Language:** Swift
-- **UI Framework:** SwiftUI
-- **System Integration:** * `ScriptingBridge` (to control Apple Music).
-  - `AppKit` (for window management/mouse tracking).
-  - `MenuBarExtra` (for status bar entry).
-- **Networking:** `URLSession` (Native async/await).
+- **Platform:** macOS 14.0+
+- **Language:** Swift 5
+- **UI:** SwiftUI + AppKit (`NSStatusItem`, `TickerView` as NSView)
+- **Music Integration:** ScriptingBridge + Apple Music private API (`amp-api.music.apple.com`)
+- **Networking:** URLSession (async/await)

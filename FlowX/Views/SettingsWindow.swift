@@ -6,7 +6,7 @@ final class SettingsWindowController: NSWindowController {
 
     private init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 400, height: 140),
+            contentRect: NSRect(x: 0, y: 0, width: 460, height: 240),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -14,9 +14,9 @@ final class SettingsWindowController: NSWindowController {
         window.title = "FlowX Settings"
         window.center()
         window.isReleasedWhenClosed = false
-        window.setContentSize(NSSize(width: 400, height: 140))
-        window.minSize = NSSize(width: 400, height: 140)
-        window.maxSize = NSSize(width: 400, height: 140)
+        window.setContentSize(NSSize(width: 460, height: 240))
+        window.minSize = NSSize(width: 460, height: 240)
+        window.maxSize = NSSize(width: 460, height: 240)
         window.contentView = NSHostingView(rootView: SettingsView())
         super.init(window: window)
     }
@@ -30,7 +30,9 @@ final class SettingsWindowController: NSWindowController {
 }
 
 struct SettingsView: View {
-    @AppStorage("tickerWidth") private var tickerWidth: Double = 200
+    @State private var userToken: String = AppSettings.shared.userToken
+    @State private var storefront: String = AppSettings.shared.storefront
+    @State private var tickerWidth: Double = AppSettings.shared.tickerWidth
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -38,16 +40,41 @@ struct SettingsView: View {
                 .font(.title3)
                 .fontWeight(.semibold)
 
-            HStack(spacing: 12) {
-                Text("Lyrics Width")
-                Slider(value: $tickerWidth, in: 120...400, step: 10)
-                    .onChange(of: tickerWidth) { _, _ in
-                        NotificationCenter.default.post(name: .tickerWidthChanged, object: nil)
-                    }
-                Text("\(Int(tickerWidth))px")
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-                    .frame(width: 45, alignment: .trailing)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 12) {
+                    Text("User Token")
+                        .frame(width: 80, alignment: .trailing)
+                    SecureField("media-user-token", text: $userToken)
+                        .textFieldStyle(.roundedBorder)
+                        .onChange(of: userToken) { _, newValue in
+                            AppSettings.shared.userToken = newValue
+                        }
+                }
+
+                HStack(spacing: 12) {
+                    Text("Storefront")
+                        .frame(width: 80, alignment: .trailing)
+                    TextField("e.g. cn, us, jp", text: $storefront)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 120)
+                        .onChange(of: storefront) { _, newValue in
+                            AppSettings.shared.storefront = newValue
+                        }
+                }
+
+                HStack(spacing: 12) {
+                    Text("Lyrics Width")
+                        .frame(width: 80, alignment: .trailing)
+                    Slider(value: $tickerWidth, in: 120...400, step: 10)
+                        .onChange(of: tickerWidth) { _, newValue in
+                            AppSettings.shared.tickerWidth = newValue
+                            NotificationCenter.default.post(name: .tickerWidthChanged, object: nil)
+                        }
+                    Text("\(Int(tickerWidth))px")
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                        .frame(width: 45, alignment: .trailing)
+                }
             }
         }
         .padding(20)

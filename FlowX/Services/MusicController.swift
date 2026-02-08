@@ -14,7 +14,7 @@ final class MusicController: ObservableObject {
     private(set) var playerPosition: TimeInterval = 0
 
     private let musicApp: MusicApplication
-    private let amLyrics = AppleMusicLyrics()
+    private let amLyrics = LyricsService()
     private var lyrics: [LyricLine] = []
     private var lastFetchedTrackIdentity = ""
     private var lastActiveIndex: Int = -1
@@ -147,7 +147,6 @@ final class MusicController: ObservableObject {
             if let lines = await amLyrics.fetchLyrics(
                 trackName: track.title,
                 artistName: track.artist,
-                albumName: track.album,
                 duration: track.duration,
                 persistentID: track.persistentID
             ) {

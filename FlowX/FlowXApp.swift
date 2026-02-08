@@ -22,8 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var cancellables = Set<AnyCancellable>()
 
     private var tickerWidth: CGFloat {
-        let v = UserDefaults.standard.double(forKey: "tickerWidth")
-        return v > 0 ? CGFloat(v) : 200
+        CGFloat(AppSettings.shared.tickerWidth)
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {

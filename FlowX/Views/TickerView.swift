@@ -125,10 +125,16 @@ final class TickerView: NSView {
 
     // MARK: - Layout
 
+    private var lastLayoutWidth: CGFloat = 0
+
     override func layout() {
         super.layout()
         relayoutButtons()
-        if !isHovering { updateDisplay() }
+        // 只在宽度变化时重建动画，避免 layout ↔ updateDisplay 递归
+        if !isHovering && bounds.width != lastLayoutWidth {
+            lastLayoutWidth = bounds.width
+            updateDisplay()
+        }
     }
 
     private func relayoutButtons() {
@@ -145,8 +151,10 @@ final class TickerView: NSView {
     // MARK: - Display
 
     private func updateDisplay() {
-        label.layer?.removeAllAnimations()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
 
+        label.layer?.removeAllAnimations()
         label.stringValue = currentText
         label.sizeToFit()
 
@@ -157,6 +165,7 @@ final class TickerView: NSView {
 
         if textWidth <= viewWidth {
             label.frame = NSRect(x: (viewWidth - textWidth) / 2, y: labelY, width: textWidth, height: label.frame.height)
+            CATransaction.commit()
             return
         }
 
@@ -168,6 +177,7 @@ final class TickerView: NSView {
             label.sizeToFit()
             let paddedWidth = label.frame.width
             label.frame = NSRect(x: 0, y: labelY, width: paddedWidth, height: label.frame.height)
+            CATransaction.commit()
 
             let loopDist = measureText(currentText + "        ")
             let anim = CABasicAnimation(keyPath: "position.x")
@@ -179,6 +189,7 @@ final class TickerView: NSView {
             label.layer?.add(anim, forKey: animKey)
         } else {
             label.frame = NSRect(x: 0, y: labelY, width: textWidth, height: label.frame.height)
+            CATransaction.commit()
 
             let availableTime = max(lineDuration, 2)
             let waitTime = availableTime * 0.55
