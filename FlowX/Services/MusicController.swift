@@ -20,10 +20,8 @@ final class MusicController: ObservableObject {
     private var lastActiveIndex: Int = -1
 
     private init() {
-        musicApp = unsafeBitCast( // nonisolated cast required for ScriptingBridge
-            SBApplication(bundleIdentifier: "com.apple.Music")!,
-            to: MusicApplication.self
-        )
+        let app: AnyObject = SBApplication(bundleIdentifier: "com.apple.Music")!
+        musicApp = unsafeBitCast(app, to: MusicApplication.self)
 
         // Listen for Apple Music state changes (immediate, no polling needed)
         DistributedNotificationCenter.default().addObserver(

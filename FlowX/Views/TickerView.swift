@@ -6,6 +6,7 @@ final class TickerView: NSView {
     private var currentText = ""
     private var animKey = "scroll"
     private var isHovering = false
+    private var trackingArea: NSTrackingArea?
 
     private var btnPrev: NSButton!
     private var btnPlayPause: NSButton!
@@ -52,6 +53,7 @@ final class TickerView: NSView {
         addSubview(label)
 
         setupHoverButtons()
+        updateTrackingArea()
     }
 
     // MARK: - Hover buttons
@@ -94,16 +96,18 @@ final class TickerView: NSView {
         )
     }
 
-    // MARK: - Tracking area
+    // MARK: - Tracking area (hover detection)
 
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        trackingAreas.forEach { removeTrackingArea($0) }
-        addTrackingArea(NSTrackingArea(
+    private func updateTrackingArea() {
+        if let old = trackingArea { removeTrackingArea(old) }
+        let area = NSTrackingArea(
             rect: bounds,
-            options: [.mouseEnteredAndExited, .activeAlways],
-            owner: self
-        ))
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        trackingArea = area
     }
 
     override func mouseEntered(with event: NSEvent) {
