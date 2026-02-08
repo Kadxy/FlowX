@@ -2,18 +2,22 @@ import Foundation
 
 struct TTMLParser {
     static func parse(_ ttml: String) -> [LyricLine] {
+        let isWordTiming = ttml.contains("itunes:timing=\"Word\"")
+
         // Try simplified Chinese translation first, fall back to main body
-        if let lines = parseTranslation(ttml, lang: "zh-Hans"), !lines.isEmpty {
+        if let lines = parseTranslation(ttml, lang: "zh-Hans", wordTiming: isWordTiming), !lines.isEmpty {
             return lines
         }
-        return parseBody(ttml)
+        let bodyLines = parseBody(ttml, wordTiming: isWordTiming)
+        if !bodyLines.isEmpty { return bodyLines }
+
+        // Fallback: timing="None" — plain lyrics without timestamps
+        return parsePlainBody(ttml)
     }
 
     // MARK: - Parse zh-Hans translation section
-    // Format: <text for="L1"><span begin="30.208" end="30.670">这是</span><span ...>一首</span>...</text>
 
-    private static func parseTranslation(_ ttml: String, lang: String) -> [LyricLine]? {
-        // Find the translation block for the target language
+    private static func parseTranslation(_ ttml: String, lang: String, wordTiming: Bool) -> [LyricLine]? {
         let translationPattern = #"<translation[^>]*xml:lang="\#(lang)"[^>]*>(.*?)</translation>"#
         guard let translationRegex = try? NSRegularExpression(pattern: translationPattern, options: [.dotMatchesLineSeparators]),
               let translationMatch = translationRegex.firstMatch(in: ttml, range: NSRange(ttml.startIndex..., in: ttml)),
@@ -22,7 +26,6 @@ struct TTMLParser {
         }
         let translationBlock = String(ttml[translationRange])
 
-        // Extract each <text for="Lx">...</text>
         let textPattern = #"<text\s+for="[^"]*">(.*?)</text>"#
         guard let textRegex = try? NSRegularExpression(pattern: textPattern, options: [.dotMatchesLineSeparators]) else { return nil }
         let textMatches = textRegex.matches(in: translationBlock, range: NSRange(translationBlock.startIndex..., in: translationBlock))
@@ -33,55 +36,123 @@ struct TTMLParser {
             guard let contentRange = Range(match.range(at: 1), in: translationBlock) else { continue }
             let content = String(translationBlock[contentRange])
 
-            // Extract spans: <span begin="30.208" end="30.670" ...>text</span>
-            let spanPattern = #"<span\s+begin="([^"]+)"[^>]*>([^<]*)</span>"#
-            guard let spanRegex = try? NSRegularExpression(pattern: spanPattern, options: []) else { continue }
-            let spanMatches = spanRegex.matches(in: content, range: NSRange(content.startIndex..., in: content))
+            let spans = extractSpans(from: content)
+            guard !spans.isEmpty else { continue }
 
-            guard let firstSpan = spanMatches.first,
-                  let beginRange = Range(firstSpan.range(at: 1), in: content) else { continue }
+            let lineTime = spans.first!.begin
+            let lineEnd = spans.last!.end
+            // For display: strip tags but keep x-bg content (background vocals in parentheses)
+            let lineText = stripTags(content).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !lineText.isEmpty else { continue }
 
-            let beginStr = String(content[beginRange])
-            let time = parseTime(beginStr)
-
-            // Concatenate all span texts
-            var text = ""
-            for span in spanMatches {
-                if let textRange = Range(span.range(at: 2), in: content) {
-                    text += String(content[textRange])
-                }
-            }
-            text = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !text.isEmpty else { continue }
-
-            result.append(LyricLine(id: result.count, time: time, text: text))
+            result.append(LyricLine(
+                id: result.count,
+                time: lineTime,
+                endTime: lineEnd,
+                text: lineText,
+                words: wordTiming ? spans : []
+            ))
         }
 
         return result.isEmpty ? nil : result.sorted { $0.time < $1.time }
     }
 
     // MARK: - Parse main <body> <p> elements (fallback)
-    // Format: <p begin="30.208" end="36.531" ...><span ...>text</span>...</p>
 
-    private static func parseBody(_ ttml: String) -> [LyricLine] {
-        let pattern = #"<p\s+begin="([^"]+)"[^>]*>(.*?)</p>"#
+    private static func parseBody(_ ttml: String, wordTiming: Bool) -> [LyricLine] {
+        let pattern = #"<p\s+begin="([^"]+)"\s+end="([^"]+)"[^>]*>(.*?)</p>"#
         guard let regex = try? NSRegularExpression(pattern: pattern, options: [.dotMatchesLineSeparators]) else { return [] }
         let matches = regex.matches(in: ttml, range: NSRange(ttml.startIndex..., in: ttml))
 
         var result: [LyricLine] = []
         for match in matches {
             guard let beginRange = Range(match.range(at: 1), in: ttml),
-                  let contentRange = Range(match.range(at: 2), in: ttml) else { continue }
+                  let endRange = Range(match.range(at: 2), in: ttml),
+                  let contentRange = Range(match.range(at: 3), in: ttml) else { continue }
 
             let beginStr = String(ttml[beginRange])
+            let endStr = String(ttml[endRange])
             let rawContent = String(ttml[contentRange])
+
+            let spans = wordTiming ? extractSpans(from: rawContent) : []
+            // For display text: strip tags but keep x-bg content (background vocals in parentheses)
             let text = stripTags(rawContent).trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { continue }
 
-            result.append(LyricLine(id: result.count, time: parseTime(beginStr), text: text))
+            result.append(LyricLine(
+                id: result.count,
+                time: parseTime(beginStr),
+                endTime: parseTime(endStr),
+                text: text,
+                words: spans
+            ))
         }
 
         return result.sorted { $0.time < $1.time }
+    }
+
+    // MARK: - Extract spans with timing
+
+    private static func extractSpans(from content: String) -> [LyricWord] {
+        // Strip x-bg (background vocal) blocks before extracting spans,
+        // since their inner <span> tags also have begin/end and would pollute the word list
+        let stripped = content.replacingOccurrences(
+            of: #"<span\s+ttm:role="x-bg"[^>]*>.*?</span>"#,
+            with: "",
+            options: .regularExpression
+        )
+
+        // Capture span text + any trailing text before the next tag (e.g. spaces between spans)
+        let spanPattern = #"<span\s+begin="([^"]+)"\s+end="([^"]+)"[^>]*>([^<]*)</span>([^<]*)"#
+        guard let regex = try? NSRegularExpression(pattern: spanPattern, options: []) else { return [] }
+        let matches = regex.matches(in: stripped, range: NSRange(stripped.startIndex..., in: stripped))
+
+        var result: [LyricWord] = []
+        for match in matches {
+            guard let beginRange = Range(match.range(at: 1), in: stripped),
+                  let endRange = Range(match.range(at: 2), in: stripped),
+                  let textRange = Range(match.range(at: 3), in: stripped) else { continue }
+
+            var text = String(stripped[textRange])
+            // Append trailing inter-span text (spaces, etc.)
+            if let trailingRange = Range(match.range(at: 4), in: stripped) {
+                text += String(stripped[trailingRange])
+            }
+            guard !text.isEmpty else { continue }
+
+            result.append(LyricWord(
+                text: text,
+                begin: parseTime(String(stripped[beginRange])),
+                end: parseTime(String(stripped[endRange]))
+            ))
+        }
+
+        return result
+    }
+
+    // MARK: - Parse plain lyrics (timing="None", no begin/end on <p>)
+
+    private static func parsePlainBody(_ ttml: String) -> [LyricLine] {
+        let pattern = #"<p>([^<]+)</p>"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return [] }
+        let matches = regex.matches(in: ttml, range: NSRange(ttml.startIndex..., in: ttml))
+
+        var result: [LyricLine] = []
+        for match in matches {
+            guard let textRange = Range(match.range(at: 1), in: ttml) else { continue }
+            let text = String(ttml[textRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { continue }
+
+            result.append(LyricLine(
+                id: result.count,
+                time: 0,
+                endTime: 0,
+                text: text,
+                words: []
+            ))
+        }
+
+        return result
     }
 
     // MARK: - Time parsing: "30.208" or "1:13.808" or "00:01:13.808"

@@ -55,6 +55,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self, selector: #selector(onMenuBarLyricsWidthChanged),
             name: .menuBarLyricsWidthChanged, object: nil
         )
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(onMenuBarKaraokeChanged),
+            name: .menuBarKaraokeChanged, object: nil
+        )
 
         mc.$currentLyricLine.removeDuplicates().receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.updateMenuBar() }.store(in: &cancellables)
@@ -123,6 +127,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let w = menuBarLyricsWidth
         lyricsItem.length = w
         lyricsView.frame = NSRect(x: 0, y: 0, width: w, height: 22)
+    }
+
+    @objc private func onMenuBarKaraokeChanged() {
+        lyricsView.refreshLayers()
     }
 
     private func updateMenuBar() {

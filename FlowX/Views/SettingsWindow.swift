@@ -6,8 +6,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
     private init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 520, height: 480),
-            styleMask: [.titled, .closable],
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: 720),
+            styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
         )
@@ -16,9 +16,9 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         window.isReleasedWhenClosed = false
         window.collectionBehavior = [.managed, .participatesInCycle]
         window.level = .normal
-        window.setContentSize(NSSize(width: 520, height: 480))
-        window.minSize = NSSize(width: 520, height: 480)
-        window.maxSize = NSSize(width: 520, height: 480)
+        window.setContentSize(NSSize(width: 520, height: 720))
+        window.minSize = NSSize(width: 520, height: 720)
+        window.maxSize = NSSize(width: 520, height: 720)
         window.contentView = NSHostingView(rootView: SettingsView())
         super.init(window: window)
         window.delegate = self
@@ -133,6 +133,20 @@ private struct SettingsRow<Content: View>: View {
     }
 }
 
+// MARK: - Section Header
+
+private struct SectionHeader: View {
+    let title: LocalizedStringKey
+    let icon: String
+
+    var body: some View {
+        Label(title, systemImage: icon)
+            .font(.system(.subheadline, weight: .semibold))
+            .foregroundStyle(.secondary)
+            .padding(.leading, 4)
+    }
+}
+
 // MARK: - Settings View
 
 private let storefronts = ["cn", "us", "jp"]
@@ -154,108 +168,133 @@ struct SettingsView: View {
     @State private var storefront: String = AppSettings.shared.storefront
     @State private var menuBarLyricsWidth: Double = AppSettings.shared.menuBarLyricsWidth
     @State private var language: String = AppSettings.shared.language
+    @State private var menuBarKaraoke: Bool = AppSettings.shared.menuBarKaraoke
     @State private var showRestartAlert = false
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+        VStack(alignment: .leading, spacing: 24) {
 
-                // MARK: Apple Music API
-                VStack(alignment: .leading, spacing: 10) {
-                    Label("Apple Music API", systemImage: "apple.logo")
-                        .font(.system(.subheadline, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .padding(.leading, 4)
+            // MARK: Apple Music API
+            VStack(alignment: .leading, spacing: 10) {
+                SectionHeader(title: "Apple Music API", icon: "key")
 
-                    VStack(spacing: 0) {
-                        // User Token
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("User Token")
-                                .font(.system(.body, weight: .medium))
-                            CharWrapTextView(text: $userToken)
-                                .frame(height: 80)
-                                .background(
-                                    Color.primary.opacity(0.04),
-                                    in: RoundedRectangle(cornerRadius: 6)
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
-                                )
-                                .onChange(of: userToken) { _, val in
-                                    AppSettings.shared.userToken = val
-                                }
-                        }
-                        .padding(16)
-
-                        Divider().padding(.horizontal, 16)
-
-                        // Storefront
-                        SettingsRow("Storefront") {
-                            Picker("", selection: $storefront) {
-                                ForEach(storefronts, id: \.self) { code in
-                                    Text(code.uppercased()).tag(code)
-                                }
+                VStack(spacing: 0) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("User Token")
+                            .font(.system(.body, weight: .medium))
+                        CharWrapTextView(text: $userToken)
+                            .frame(height: 80)
+                            .background(
+                                Color.primary.opacity(0.04),
+                                in: RoundedRectangle(cornerRadius: 6)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+                            )
+                            .onChange(of: userToken) { _, val in
+                                AppSettings.shared.userToken = val
                             }
-                            .labelsHidden()
-                            .frame(width: 90)
-                            .onChange(of: storefront) { _, val in
-                                AppSettings.shared.storefront = val
-                            }
-                        }
-                        .padding(16)
                     }
-                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10))
-                }
+                    .padding(16)
 
-                // MARK: Appearance
-                VStack(alignment: .leading, spacing: 10) {
-                    Label("Appearance", systemImage: "paintbrush")
-                        .font(.system(.subheadline, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .padding(.leading, 4)
+                    Divider().padding(.horizontal, 16)
 
-                    VStack(spacing: 0) {
-                        SettingsRow("MenuBar Lyrics Width") {
-                            HStack(spacing: 10) {
-                                Slider(value: $menuBarLyricsWidth, in: 120...320, step: 10)
-                                    .frame(width: 150)
-                                    .onChange(of: menuBarLyricsWidth) { _, val in
-                                        AppSettings.shared.menuBarLyricsWidth = val
-                                        NotificationCenter.default.post(name: .menuBarLyricsWidthChanged, object: nil)
-                                    }
-                                Text("\(Int(menuBarLyricsWidth)) pt")
-                                    .font(.system(.body, design: .monospaced))
-                                    .foregroundStyle(.secondary)
-                                    .frame(width: 50, alignment: .trailing)
+                    SettingsRow("Storefront") {
+                        Picker("", selection: $storefront) {
+                            ForEach(storefronts, id: \.self) { code in
+                                Text(code.uppercased()).tag(code)
                             }
                         }
-                        .padding(16)
-
-                        Divider().padding(.horizontal, 16)
-
-                        SettingsRow("Language") {
-                            Picker("", selection: $language) {
-                                ForEach(languages, id: \.code) { lang in
-                                    Text(lang.label).tag(lang.code)
-                                }
-                            }
-                            .labelsHidden()
-                            .frame(width: 130)
-                            .onChange(of: language) { _, val in
-                                AppSettings.shared.language = val
-                                showRestartAlert = true
-                            }
+                        .labelsHidden()
+                        .frame(width: 90)
+                        .onChange(of: storefront) { _, val in
+                            AppSettings.shared.storefront = val
                         }
-                        .padding(16)
                     }
-                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10))
+                    .padding(16)
                 }
-
-                Spacer()
+                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10))
             }
-            .padding(24)
+
+            // MARK: Menu Bar Lyrics
+            VStack(alignment: .leading, spacing: 10) {
+                SectionHeader(title: "Menu Bar Lyrics", icon: "text.line.first.and.arrowtriangle.forward")
+
+                VStack(spacing: 0) {
+                    SettingsRow("Lyrics Width") {
+                        HStack(spacing: 10) {
+                            Slider(value: $menuBarLyricsWidth, in: 120...320, step: 10)
+                                .frame(width: 150)
+                                .onChange(of: menuBarLyricsWidth) { _, val in
+                                    AppSettings.shared.menuBarLyricsWidth = val
+                                    NotificationCenter.default.post(name: .menuBarLyricsWidthChanged, object: nil)
+                                }
+                            Text("\(Int(menuBarLyricsWidth)) pt")
+                                .font(.system(.body, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 50, alignment: .trailing)
+                        }
+                    }
+                    .padding(16)
+
+                    Divider().padding(.horizontal, 16)
+
+                    SettingsRow("Karaoke Effect") {
+                        Toggle("", isOn: $menuBarKaraoke)
+                            .toggleStyle(.switch)
+                            .labelsHidden()
+                            .onChange(of: menuBarKaraoke) { _, val in
+                                AppSettings.shared.menuBarKaraoke = val
+                                NotificationCenter.default.post(name: .menuBarKaraokeChanged, object: nil)
+                            }
+                    }
+                    .padding(16)
+                }
+                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10))
+            }
+
+            // MARK: Desktop Lyrics (placeholder)
+            VStack(alignment: .leading, spacing: 10) {
+                SectionHeader(title: "Desktop Lyrics", icon: "text.below.photo")
+
+                VStack(spacing: 0) {
+                    HStack {
+                        Text("Coming Soon")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                    }
+                    .padding(16)
+                }
+                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10))
+            }
+
+            // MARK: General
+            VStack(alignment: .leading, spacing: 10) {
+                SectionHeader(title: "General", icon: "gearshape")
+
+                VStack(spacing: 0) {
+                    SettingsRow("Language") {
+                        Picker("", selection: $language) {
+                            ForEach(languages, id: \.code) { lang in
+                                Text(lang.label).tag(lang.code)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 130)
+                        .onChange(of: language) { _, val in
+                            AppSettings.shared.language = val
+                            showRestartAlert = true
+                        }
+                    }
+                    .padding(16)
+                }
+                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10))
+            }
+
+            Spacer()
         }
+        .padding(24)
         .onTapGesture {
             NSApp.keyWindow?.makeFirstResponder(nil)
         }
@@ -279,4 +318,5 @@ struct SettingsView: View {
 
 extension Notification.Name {
     static let menuBarLyricsWidthChanged = Notification.Name("menuBarLyricsWidthChanged")
+    static let menuBarKaraokeChanged = Notification.Name("menuBarKaraokeChanged")
 }

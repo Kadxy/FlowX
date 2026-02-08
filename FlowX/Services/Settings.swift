@@ -60,6 +60,11 @@ final class AppSettings {
         set { data["showMenuBarLyrics"] = newValue; save() }
     }
 
+    var menuBarKaraoke: Bool {
+        get { data["menuBarKaraoke"] as? Bool ?? true }
+        set { data["menuBarKaraoke"] = newValue; save() }
+    }
+
     /// "system", "en", or "zh-Hans"
     var language: String {
         get { data["language"] as? String ?? "system" }

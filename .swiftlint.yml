@@ -5,6 +5,14 @@ line_length:
   warning: 150
   error: 200
 
+file_length:
+  warning: 450
+  error: 640
+
+type_body_length:
+  warning: 360
+  error: 420
+
 identifier_name:
   min_length:
     warning: 1
@@ -14,3 +22,7 @@ force_cast: warning
 type_name:
   min_length:
     warning: 1
+
+function_parameter_count:
+  warning: 8
+  error: 12

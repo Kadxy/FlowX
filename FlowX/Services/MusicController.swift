@@ -10,15 +10,18 @@ final class MusicController: ObservableObject {
     @Published private(set) var currentTrack: TrackInfo = .empty
     @Published private(set) var isMusicRunning: Bool = false
     @Published private(set) var currentLyricLine: String = ""
+    @Published private(set) var currentLine: LyricLine?
+    @Published private(set) var currentLineIndex: Int = -1
     @Published private(set) var hasLyrics: Bool = false
 
     private(set) var playerPosition: TimeInterval = 0
+    private(set) var lyrics: [LyricLine] = []
 
     private let musicApp: MusicApplication
     private let amLyrics = LyricsService()
-    private var lyrics: [LyricLine] = []
     private var lastFetchedTrackIdentity = ""
     private var lastActiveIndex: Int = -1
+    private var lastWasInterlude: Bool = false
 
     private init() {
         let app: AnyObject = SBApplication(bundleIdentifier: "com.apple.Music")!
@@ -108,7 +111,10 @@ final class MusicController: ObservableObject {
         currentTrack = .empty
         playerPosition = 0
         currentLyricLine = ""
+        currentLine = nil
+        currentLineIndex = -1
         lastActiveIndex = -1
+        lastWasInterlude = false
     }
 
     // MARK: - Position polling (only active when playing)
@@ -153,7 +159,10 @@ final class MusicController: ObservableObject {
         lyrics = []
         hasLyrics = false
         currentLyricLine = ""
+        currentLine = nil
+        currentLineIndex = -1
         lastActiveIndex = -1
+        lastWasInterlude = false
 
         let track = currentTrack
         Task {
@@ -167,13 +176,35 @@ final class MusicController: ObservableObject {
                 guard self.currentTrack.identity == track.identity else { return }
                 if let lines, !lines.isEmpty {
                     self.lyrics = lines
-                    self.hasLyrics = true
+                    // Only treat as synced lyrics if they have timing info
+                    self.hasLyrics = lines.contains { $0.time > 0 }
                 }
             }
         }
     }
 
     // MARK: - Lyric sync
+
+    private static let interludeThreshold: TimeInterval = 5.0
+
+    private static func makeInterludeLine(start: TimeInterval, end: TimeInterval) -> LyricLine {
+        let gap = end - start
+        let count = gap >= 15 ? 5 : gap >= 10 ? 4 : 3
+        let symbol = "♪"
+        let separator = "  "
+        let text = Array(repeating: symbol, count: count).joined(separator: separator)
+        let wordDuration = (end - start) / Double(count)
+
+        var words: [LyricWord] = []
+        for i in 0..<count {
+            let wStart = start + Double(i) * wordDuration
+            let wEnd = wStart + wordDuration
+            let wText = i < count - 1 ? symbol + separator : symbol
+            words.append(LyricWord(text: wText, begin: wStart, end: wEnd))
+        }
+
+        return LyricLine(id: -1, time: start, endTime: end, text: text, words: words)
+    }
 
     private func updateCurrentLyric() {
         guard !lyrics.isEmpty else { return }
@@ -184,9 +215,33 @@ final class MusicController: ObservableObject {
             if line.time <= pos { activeIdx = i } else { break }
         }
 
-        if activeIdx != lastActiveIndex {
-            lastActiveIndex = activeIdx
-            currentLyricLine = activeIdx >= 0 ? lyrics[activeIdx].text : ""
+        // Detect interlude: past current line's endTime with a significant gap before the next line
+        var isInterlude = false
+        if activeIdx >= 0, lyrics[activeIdx].endTime > 0, pos > lyrics[activeIdx].endTime {
+            let nextStart = activeIdx + 1 < lyrics.count ? lyrics[activeIdx + 1].time : .infinity
+            isInterlude = (nextStart - lyrics[activeIdx].endTime) >= Self.interludeThreshold
+        }
+
+        guard activeIdx != lastActiveIndex || isInterlude != lastWasInterlude else { return }
+        lastActiveIndex = activeIdx
+        lastWasInterlude = isInterlude
+
+        if activeIdx < 0 {
+            currentLyricLine = ""
+            currentLine = nil
+            currentLineIndex = -1
+        } else if isInterlude {
+            // Build a synthetic LyricLine so karaoke animation works on the symbols
+            let start = lyrics[activeIdx].endTime
+            let end = activeIdx + 1 < lyrics.count ? lyrics[activeIdx + 1].time : start + 5
+            let line = Self.makeInterludeLine(start: start, end: end)
+            currentLyricLine = line.text
+            currentLine = line
+            currentLineIndex = activeIdx
+        } else {
+            currentLyricLine = lyrics[activeIdx].text
+            currentLine = lyrics[activeIdx]
+            currentLineIndex = activeIdx
         }
     }
 
