@@ -219,7 +219,7 @@ struct SettingsView: View {
 
             // MARK: Menu Bar Lyrics
             VStack(alignment: .leading, spacing: 10) {
-                SectionHeader(title: "Menu Bar Lyrics", icon: "text.line.first.and.arrowtriangle.forward")
+                SectionHeader(title: "Menu Bar Lyrics", icon: "menubar.rectangle")
 
                 VStack(spacing: 0) {
                     SettingsRow("Lyrics Width") {
@@ -256,7 +256,7 @@ struct SettingsView: View {
 
             // MARK: Desktop Lyrics (placeholder)
             VStack(alignment: .leading, spacing: 10) {
-                SectionHeader(title: "Desktop Lyrics", icon: "text.below.photo")
+                SectionHeader(title: "Desktop Lyrics", icon: "menubar.dock.rectangle")
 
                 VStack(spacing: 0) {
                     HStack {

@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let mc = MusicController.shared
     private var cancellables = Set<AnyCancellable>()
     private lazy var menu = makeMenu()
+    private var openInMusicItem: NSMenuItem!
     private var menuBarLyricsItem: NSMenuItem!
     private var viewLyricsFileItem: NSMenuItem!
     private var clearCacheItem: NSMenuItem!
@@ -89,11 +90,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func makeMenu() -> NSMenu {
         let menu = NSMenu()
 
+        openInMusicItem = NSMenuItem(title: String(localized: "Open in Apple Music"), action: #selector(openInMusic), keyEquivalent: "")
+        openInMusicItem.target = self
+        openInMusicItem.image = NSImage(systemSymbolName: "arrow.up.forward", accessibilityDescription: nil)
+        menu.addItem(openInMusicItem)
+
+        menu.addItem(NSMenuItem.separator())
+
         menuBarLyricsItem = NSMenuItem(title: String(localized: "Menu Bar Lyrics"), action: #selector(toggleMenuBarLyrics), keyEquivalent: "")
         menuBarLyricsItem.target = self
-        menuBarLyricsItem.image = NSImage(systemSymbolName: "text.quote", accessibilityDescription: nil)
+        menuBarLyricsItem.image = NSImage(systemSymbolName: "menubar.rectangle", accessibilityDescription: nil)
         menuBarLyricsItem.state = AppSettings.shared.showMenuBarLyrics ? .on : .off
         menu.addItem(menuBarLyricsItem)
+
+        let desktopLyricsItem = NSMenuItem(title: String(localized: "Desktop Lyrics"), action: nil, keyEquivalent: "")
+        desktopLyricsItem.image = NSImage(systemSymbolName: "menubar.dock.rectangle", accessibilityDescription: nil)
+        desktopLyricsItem.isEnabled = false
+        menu.addItem(desktopLyricsItem)
 
         menu.addItem(NSMenuItem.separator())
 
@@ -134,9 +147,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func updateLyricsMenuItems() {
         let hasTrack = mc.isMusicRunning && !mc.currentTrack.title.isEmpty
         let hasCachedFile = hasTrack && mc.cachedLyricsFileURL() != nil
+        openInMusicItem.isEnabled = hasTrack
         viewLyricsFileItem.isEnabled = hasCachedFile
         clearCacheItem.isEnabled = hasCachedFile
         selectLyricsItem.isEnabled = hasTrack
+    }
+
+    @objc private func openInMusic() {
+        mc.revealInMusic()
     }
 
     @objc private func toggleMenuBarLyrics() {

@@ -262,6 +262,12 @@ final class MusicController: ObservableObject {
     func nextTrack() { musicApp.nextTrack() }
     func previousTrack() { musicApp.previousTrack() }
 
+    func revealInMusic() {
+        guard let track = musicApp.currentTrack else { return }
+        track.reveal()
+        musicApp.activate()
+    }
+
     // MARK: - Lyrics management (menu actions)
 
     func cachedLyricsFileURL() -> URL? {
