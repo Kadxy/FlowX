@@ -1,22 +1,31 @@
 import AppKit
 
 final class MenuBarLyricsView: NSView {
-    private let label = NSTextField(labelWithString: "")
     private var currentText = ""
     private var isHovering = false
     private var trackingArea: NSTrackingArea?
 
-    private var btnPrev: NSButton!
-    private var btnPlayPause: NSButton!
-    private var btnNext: NSButton!
+    // Pre-cached SF Symbol images (hierarchicalColor resolves dynamically per draw)
+    private let iconConfig = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
+        .applying(.init(hierarchicalColor: .labelColor))
+    private lazy var prevImage = NSImage(systemSymbolName: "backward.end.fill", accessibilityDescription: nil)?.withSymbolConfiguration(iconConfig)
+    private lazy var playImage = NSImage(systemSymbolName: "play.fill", accessibilityDescription: nil)?.withSymbolConfiguration(iconConfig)
+    private lazy var pauseImage = NSImage(systemSymbolName: "pause.fill", accessibilityDescription: nil)?.withSymbolConfiguration(iconConfig)
+    private lazy var nextImage = NSImage(systemSymbolName: "forward.end.fill", accessibilityDescription: nil)?.withSymbolConfiguration(iconConfig)
 
     var onPrev: (() -> Void)?
     var onPlayPause: (() -> Void)?
     var onNext: (() -> Void)?
-    var isPlaying: Bool = false { didSet { updateButtonIcon() } }
+
+    var isPlaying: Bool = false {
+        didSet {
+            guard isPlaying != oldValue, isHovering else { return }
+            needsDisplay = true
+        }
+    }
 
     var font: NSFont = NSFont.systemFont(ofSize: 14) {
-        didSet { label.font = font; updateDisplay() }
+        didSet { if !isHovering { needsDisplay = true } }
     }
 
     var text: String {
@@ -24,7 +33,7 @@ final class MenuBarLyricsView: NSView {
         set {
             guard newValue != currentText else { return }
             currentText = newValue
-            if !isHovering { updateDisplay() }
+            if !isHovering { needsDisplay = true }
         }
     }
 
@@ -41,59 +50,47 @@ final class MenuBarLyricsView: NSView {
     private func setup() {
         wantsLayer = true
         layer?.masksToBounds = true
-
-        label.font = font
-        label.lineBreakMode = .byClipping
-        label.wantsLayer = true
-        addSubview(label)
-
-        setupHoverButtons()
         updateTrackingArea()
     }
 
-    // MARK: - Hover buttons
+    // MARK: - Drawing
 
-    private func setupHoverButtons() {
-        let icons = ["backward.end.fill", "play.fill", "forward.end.fill"]
-        var buttons: [NSButton] = []
-        for (i, icon) in icons.enumerated() {
-            let btn = NSButton(frame: .zero)
-            btn.bezelStyle = .inline
-            btn.isBordered = false
-            let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
-            btn.image = NSImage(systemSymbolName: icon, accessibilityDescription: nil)?.withSymbolConfiguration(config)
-            btn.imageScaling = .scaleNone
-            (btn.cell as? NSButtonCell)?.highlightsBy = []
-            btn.target = self
-            btn.action = #selector(buttonTapped(_:))
-            btn.tag = i
-            btn.isHidden = true
-            addSubview(btn)
-            buttons.append(btn)
-        }
-        btnPrev = buttons[0]
-        btnPlayPause = buttons[1]
-        btnNext = buttons[2]
-    }
-
-    @objc private func buttonTapped(_ sender: NSButton) {
-        switch sender.tag {
-        case 0: onPrev?()
-        case 1: onPlayPause?()
-        case 2: onNext?()
-        default: break
+    override func draw(_ dirtyRect: NSRect) {
+        if isHovering {
+            drawControls()
+        } else {
+            drawLyrics()
         }
     }
 
-    private func updateButtonIcon() {
-        let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
-        btnPlayPause?.image = NSImage(
-            systemSymbolName: isPlaying ? "pause.fill" : "play.fill",
-            accessibilityDescription: nil
-        )?.withSymbolConfiguration(config)
+    private func drawLyrics() {
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: NSColor.labelColor
+        ]
+        let size = (currentText as NSString).size(withAttributes: attrs)
+        let x = size.width <= bounds.width ? (bounds.width - size.width) / 2 : 0
+        let y = (bounds.height - size.height) / 2
+        (currentText as NSString).draw(at: NSPoint(x: x, y: y), withAttributes: attrs)
     }
 
-    // MARK: - Tracking area (hover detection)
+    private func drawControls() {
+        let images = [prevImage, isPlaying ? pauseImage : playImage, nextImage]
+        let iconH: CGFloat = 14
+        let gap: CGFloat = 20
+        let totalW = CGFloat(images.count) * iconH + CGFloat(images.count - 1) * gap
+        var x = (bounds.width - totalW) / 2
+        let y = (bounds.height - iconH) / 2
+
+        for img in images {
+            guard let img else { continue }
+            let rect = NSRect(x: x, y: y, width: iconH, height: iconH)
+            img.draw(in: rect)
+            x += iconH + gap
+        }
+    }
+
+    // MARK: - Tracking area
 
     private func updateTrackingArea() {
         if let old = trackingArea { removeTrackingArea(old) }
@@ -109,65 +106,27 @@ final class MenuBarLyricsView: NSView {
 
     override func mouseEntered(with event: NSEvent) {
         isHovering = true
-        label.isHidden = true
-        setButtons(hidden: false)
+        needsDisplay = true
     }
 
     override func mouseExited(with event: NSEvent) {
         isHovering = false
-        setButtons(hidden: true)
-        label.isHidden = false
-        updateDisplay()
+        needsDisplay = true
     }
 
-    private func setButtons(hidden: Bool) {
-        [btnPrev, btnPlayPause, btnNext].forEach { $0?.isHidden = hidden }
-    }
+    // MARK: - Click handling (divide into thirds)
 
-    // MARK: - Layout
+    override func mouseDown(with event: NSEvent) {
+        guard isHovering else { return }
+        let loc = convert(event.locationInWindow, from: nil)
+        let third = bounds.width / 3
 
-    private var lastLayoutWidth: CGFloat = 0
-
-    override func layout() {
-        super.layout()
-        relayoutButtons()
-        if !isHovering && bounds.width != lastLayoutWidth {
-            lastLayoutWidth = bounds.width
-            updateDisplay()
+        if loc.x < third {
+            onPrev?()
+        } else if loc.x < third * 2 {
+            onPlayPause?()
+        } else {
+            onNext?()
         }
     }
-
-    private func relayoutButtons() {
-        let btnH: CGFloat = 30
-        let gap: CGFloat = 12
-        let buttons = [btnPrev, btnPlayPause, btnNext].compactMap { $0 }
-        buttons.forEach { $0.sizeToFit() }
-        let total = buttons.reduce(0) { $0 + $1.frame.width } + CGFloat(buttons.count - 1) * gap
-        var x = (bounds.width - total) / 2
-        let y = (bounds.height - btnH) / 2
-        for (i, btn) in buttons.enumerated() {
-            btn.frame = NSRect(x: x, y: y, width: btn.frame.width, height: btnH)
-            x += btn.frame.width + (i < buttons.count - 1 ? gap : 0)
-        }
-    }
-
-    // MARK: - Display
-
-    private func updateDisplay() {
-        label.stringValue = currentText
-        label.sizeToFit()
-
-        let textWidth = label.frame.width
-        let viewWidth = bounds.width
-        let labelY = (bounds.height - label.frame.height) / 2
-
-        label.frame = NSRect(
-            x: textWidth <= viewWidth ? (viewWidth - textWidth) / 2 : 0,
-            y: labelY,
-            width: textWidth,
-            height: label.frame.height
-        )
-    }
-
-    override func mouseDown(with event: NSEvent) {}
 }

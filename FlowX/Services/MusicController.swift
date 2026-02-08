@@ -1,6 +1,7 @@
 import Foundation
 import ScriptingBridge
 import Combine
+import AppKit
 
 final class MusicController: ObservableObject {
     static let shared = MusicController()
@@ -23,7 +24,7 @@ final class MusicController: ObservableObject {
         let app: AnyObject = SBApplication(bundleIdentifier: "com.apple.Music")!
         musicApp = unsafeBitCast(app, to: MusicApplication.self)
 
-        // Listen for Apple Music state changes (immediate, no polling needed)
+        // Instant state/track changes via notification
         DistributedNotificationCenter.default().addObserver(
             self,
             selector: #selector(onPlayerInfoChanged(_:)),
@@ -31,14 +32,20 @@ final class MusicController: ObservableObject {
             object: nil
         )
 
-        // Timer only for position updates (lyric sync)
-        // Use .common mode so it keeps firing during menu tracking
+        // Detect Music.app quit
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(onAppTerminated(_:)),
+            name: NSWorkspace.didTerminateApplicationNotification,
+            object: nil
+        )
+
+        // Lightweight position poll for lyric sync (only does work when playing)
         let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
             self?.pollPosition()
         }
         RunLoop.main.add(timer, forMode: .common)
 
-        // Initial state
         refreshState()
     }
 
@@ -47,7 +54,7 @@ final class MusicController: ObservableObject {
     @objc private func onPlayerInfoChanged(_ notification: Notification) {
         let info = notification.userInfo
 
-        // Player state from notification
+        // Player state
         if let stateStr = info?["Player State"] as? String {
             let newState: PlayerState
             switch stateStr {
@@ -60,16 +67,19 @@ final class MusicController: ObservableObject {
             isMusicRunning = true
         }
 
-        // Track info from notification
+        // Track info from notification (no SB IPC)
         let name = info?["Name"] as? String ?? ""
         let artist = info?["Artist"] as? String ?? ""
         let album = info?["Album"] as? String ?? ""
         let totalTime = info?["Total Time"] as? Double ?? 0
-        let duration = totalTime / 1000.0 // ms → s
+        let duration = totalTime / 1000.0
 
-        // persistentID: notification gives Int64, ScriptingBridge gives hex string
-        // Use ScriptingBridge for consistent hex format
-        let persistentID = musicApp.currentTrack?.persistentID ?? ""
+        let persistentID: String
+        if let pid = info?["PersistentID"] as? Int {
+            persistentID = String(format: "%lX", pid)
+        } else {
+            persistentID = currentTrack.persistentID
+        }
 
         if !name.isEmpty {
             let newTrack = TrackInfo(
@@ -87,20 +97,24 @@ final class MusicController: ObservableObject {
         }
     }
 
-    // MARK: - Position polling (only for lyric sync, lightweight)
+    // MARK: - Music.app quit detection
+
+    @objc private func onAppTerminated(_ notification: Notification) {
+        guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+              app.bundleIdentifier == "com.apple.Music" else { return }
+
+        isMusicRunning = false
+        playerState = .stopped
+        currentTrack = .empty
+        playerPosition = 0
+        currentLyricLine = ""
+        lastActiveIndex = -1
+    }
+
+    // MARK: - Position polling (only active when playing)
 
     private func pollPosition() {
-        guard musicApp.isRunning else {
-            if isMusicRunning {
-                isMusicRunning = false
-                playerState = .stopped
-                currentTrack = .empty
-                playerPosition = 0
-                currentLyricLine = ""
-                lastActiveIndex = -1
-            }
-            return
-        }
+        guard isMusicRunning, playerState == .playing else { return }
 
         playerPosition = musicApp.playerPosition
         updateCurrentLyric()
