@@ -108,6 +108,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         desktopLyricsItem.isEnabled = false
         menu.addItem(desktopLyricsItem)
 
+        let musicIslandItem = NSMenuItem(title: String(localized: "Music Island"), action: nil, keyEquivalent: "")
+        musicIslandItem.image = NSImage(systemSymbolName: "rectangle.inset.filled", accessibilityDescription: nil)
+        musicIslandItem.isEnabled = false
+        menu.addItem(musicIslandItem)
+
         menu.addItem(NSMenuItem.separator())
 
         viewLyricsFileItem = NSMenuItem(title: String(localized: "View Lyrics File"), action: #selector(viewLyricsFile), keyEquivalent: "")
