@@ -22,7 +22,6 @@ FlowX/
 │   └── TTMLParser.swift         # TTML XML → [LyricLine]
 └── Views/
     ├── TickerView.swift         # Scrolling lyrics/track info in status bar
-    ├── LogoView.swift           # Status bar icon
     └── SettingsWindow.swift     # Ticker width config
 ```
 

@@ -12,12 +12,9 @@ struct FlowXApp: App {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private static let iconWidth: CGFloat = 30
-    private static let gap: CGFloat = 6
-
-    private var statusItem: NSStatusItem!
+    private var logoItem: NSStatusItem!
+    private var tickerItem: NSStatusItem!
     private var tickerView: TickerView!
-    private var logoView: LogoView!
     private let mc = MusicController.shared
     private var cancellables = Set<AnyCancellable>()
 
@@ -26,24 +23,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Logo item — native NSStatusBarButton, created first so it sits on the right
+        logoItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
+        let img = NSImage(systemSymbolName: "music.pages.fill", accessibilityDescription: "FlowX")?
+            .withSymbolConfiguration(config)
+        img?.isTemplate = true
+        logoItem.button?.image = img
+        logoItem.button?.target = self
+        logoItem.button?.action = #selector(logoClicked)
+        logoItem.button?.sendAction(on: [.leftMouseUp])
+        logoItem.menu = makeMenu()
+
+        // Ticker item — display only, created second so it appears to the left
         let w = tickerWidth
-        let totalWidth = w + AppDelegate.gap + AppDelegate.iconWidth
-        statusItem = NSStatusBar.system.statusItem(withLength: totalWidth)
-        statusItem.button?.sendAction(on: [])
+        tickerItem = NSStatusBar.system.statusItem(withLength: w)
+        tickerItem.button?.sendAction(on: [])
 
         tickerView = TickerView(frame: NSRect(x: 0, y: 0, width: w, height: 22))
         tickerView.font = NSFont.systemFont(ofSize: 14)
         tickerView.onPrev = { [weak self] in self?.mc.previousTrack() }
         tickerView.onPlayPause = { [weak self] in self?.mc.playPause() }
         tickerView.onNext = { [weak self] in self?.mc.nextTrack() }
-        statusItem.button?.addSubview(tickerView)
-
-        logoView = LogoView(frame: NSRect(x: w + AppDelegate.gap, y: 0, width: AppDelegate.iconWidth, height: 22))
-        statusItem.button?.addSubview(logoView)
+        tickerItem.button?.addSubview(tickerView)
 
         updateTicker()
 
-        // Listen for width change from settings window
         NotificationCenter.default.addObserver(
             self, selector: #selector(onWidthChanged),
             name: .tickerWidthChanged, object: nil
@@ -62,11 +67,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .sink { [weak self] _ in self?.updateTicker() }.store(in: &cancellables)
     }
 
+    @objc private func logoClicked() {
+        NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Music.app"))
+    }
+
+    private func makeMenu() -> NSMenu {
+        let menu = NSMenu()
+        let settingsItem = NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ",")
+        settingsItem.target = self
+        menu.addItem(settingsItem)
+        menu.addItem(NSMenuItem.separator())
+        let quitItem = NSMenuItem(title: "Quit FlowX", action: #selector(quitApp), keyEquivalent: "q")
+        quitItem.target = self
+        menu.addItem(quitItem)
+        return menu
+    }
+
+    @objc private func openSettings() {
+        SettingsWindowController.shared.showWindow(nil)
+    }
+
+    @objc private func quitApp() {
+        NSApp.terminate(nil)
+    }
+
     @objc private func onWidthChanged() {
         let w = tickerWidth
-        statusItem.length = w + AppDelegate.gap + AppDelegate.iconWidth
+        tickerItem.length = w
         tickerView.frame = NSRect(x: 0, y: 0, width: w, height: 22)
-        logoView.frame = NSRect(x: w + AppDelegate.gap, y: 0, width: AppDelegate.iconWidth, height: 22)
     }
 
     private func updateTicker() {

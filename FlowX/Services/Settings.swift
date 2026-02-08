@@ -49,7 +49,7 @@ final class AppSettings {
     // MARK: - UI Config
 
     var tickerWidth: Double {
-        get { data["tickerWidth"] as? Double ?? 200 }
+        get { data["tickerWidth"] as? Double ?? 180 }
         set { data["tickerWidth"] = newValue; save() }
     }
 

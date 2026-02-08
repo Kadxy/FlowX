@@ -1,7 +1,7 @@
 import SwiftUI
 import AppKit
 
-final class SettingsWindowController: NSWindowController {
+final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     static let shared = SettingsWindowController()
 
     private init() {
@@ -14,19 +14,34 @@ final class SettingsWindowController: NSWindowController {
         window.title = "FlowX Settings"
         window.center()
         window.isReleasedWhenClosed = false
+        window.collectionBehavior = [.managed, .participatesInCycle]
+        window.level = .normal
         window.setContentSize(NSSize(width: 520, height: 480))
         window.minSize = NSSize(width: 520, height: 480)
         window.maxSize = NSSize(width: 520, height: 480)
         window.contentView = NSHostingView(rootView: SettingsView())
         super.init(window: window)
+        window.delegate = self
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
     override func showWindow(_ sender: Any?) {
-        window?.center()
-        window?.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.setActivationPolicy(.regular)
+        DispatchQueue.main.async {
+            self.window?.center()
+            self.window?.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+        }
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        // Activate Finder so the desktop keeps focus instead of
+        // switching back to the previous fullscreen app.
+        if let finder = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first {
+            finder.activate()
+        }
+        NSApp.setActivationPolicy(.accessory)
     }
 }
 
@@ -52,7 +67,7 @@ struct CharWrapTextView: NSViewRepresentable {
         textView.textContainer?.widthTracksTextView = true
         textView.isHorizontallyResizable = false
 
-        scrollView.hasVerticalScroller = true
+        scrollView.hasVerticalScroller = false
         scrollView.hasHorizontalScroller = false
         scrollView.borderType = .noBorder
         scrollView.scrollerStyle = .overlay
@@ -187,8 +202,8 @@ struct SettingsView: View {
                     VStack(spacing: 0) {
                         SettingsRow("Lyrics Width") {
                             HStack(spacing: 10) {
-                                Slider(value: $tickerWidth, in: 120...400, step: 10)
-                                    .frame(width: 180)
+                                Slider(value: $tickerWidth, in: 120...320, step: 10)
+                                    .frame(width: 150)
                                     .onChange(of: tickerWidth) { _, val in
                                         AppSettings.shared.tickerWidth = val
                                         NotificationCenter.default.post(name: .tickerWidthChanged, object: nil)

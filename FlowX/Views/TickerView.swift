@@ -54,7 +54,7 @@ final class TickerView: NSView {
     // MARK: - Hover buttons
 
     private func setupHoverButtons() {
-        let icons = ["backward.fill", "play.fill", "forward.fill"]
+        let icons = ["backward.end.fill", "play.fill", "forward.end.fill"]
         var buttons: [NSButton] = []
         for (i, icon) in icons.enumerated() {
             let btn = NSButton(frame: .zero)
