@@ -1,0 +1,22 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        <linearGradient id="rhythmGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#FF2D55;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#B620E0;stop-opacity:1" />
+        </linearGradient>
+    </defs>
+
+    <rect x="112" y="112" width="800" height="800" rx="180" ry="180" fill="white" />
+
+    <g transform="translate(512, 512)">
+        <rect x="-300" y="-100" width="80" height="200" rx="40" fill="url(#rhythmGradient)"
+            opacity="0.4" />
+        <rect x="-160" y="-180" width="80" height="360" rx="40" fill="url(#rhythmGradient)"
+            opacity="0.7" />
+        <rect x="-20" y="-280" width="100" height="560" rx="50" fill="url(#rhythmGradient)" />
+        <rect x="120" y="-180" width="80" height="360" rx="40" fill="url(#rhythmGradient)"
+            opacity="0.7" />
+        <rect x="260" y="-100" width="80" height="200" rx="40" fill="url(#rhythmGradient)"
+            opacity="0.4" />
+    </g>
+</svg>
