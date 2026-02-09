@@ -19,18 +19,25 @@ final class MenuBarLyricsView: NSView {
     private var edgeFadeLayer: CAGradientLayer?
     private var edgeFadeWidth: CGFloat { CGFloat(AppSettings.shared.menuBarEdgeFadeWidth) }
 
+    // Anchor recorded at animation build time — used to detect drift (seek / stale resume)
+    private var anchorPosition: TimeInterval = 0
+    private var anchorWallTime: CFTimeInterval = 0
+    private var anchorLineTime: TimeInterval = 0
+
     // Pre-cached SF Symbol images
     private let iconConfig = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
         .applying(.init(hierarchicalColor: .labelColor))
-    private lazy var prevImage = symbol("backward.end.fill")
-    private lazy var playImage = symbol("play.fill")
-    private lazy var pauseImage = symbol("pause.fill")
-    private lazy var nextImage = symbol("forward.end.fill")
 
     private func symbol(_ name: String) -> NSImage? {
         NSImage(systemSymbolName: name, accessibilityDescription: nil)?
             .withSymbolConfiguration(iconConfig)
     }
+
+    // Control buttons (real NSButton for native press tracking)
+    private lazy var prevButton = makeControlButton("backward.end.fill", action: #selector(prevTapped))
+    private lazy var playPauseButton = makeControlButton("play.fill", action: #selector(playPauseTapped))
+    private lazy var nextButton = makeControlButton("forward.end.fill", action: #selector(nextTapped))
+    private lazy var controlButtons = [prevButton, playPauseButton, nextButton]
 
     var onPrev: (() -> Void)?
     var onPlayPause: (() -> Void)?
@@ -39,7 +46,7 @@ final class MenuBarLyricsView: NSView {
     var isPlaying: Bool = false {
         didSet {
             guard isPlaying != oldValue else { return }
-            if isHovering { needsDisplay = true }
+            playPauseButton.image = symbol(isPlaying ? "pause.fill" : "play.fill")
             rebuildIfNeeded()
         }
     }
@@ -74,8 +81,41 @@ final class MenuBarLyricsView: NSView {
     private func setup() {
         wantsLayer = true
         layer?.masksToBounds = true
+        setupControlButtons()
         updateTrackingArea()
     }
+
+    private func makeControlButton(_ symbolName: String, action: Selector) -> NSButton {
+        let btn = NSButton()
+        btn.image = symbol(symbolName)
+        btn.bezelStyle = .regularSquare
+        btn.isBordered = false
+        btn.imagePosition = .imageOnly
+        btn.imageScaling = .scaleProportionallyDown
+        btn.target = self
+        btn.action = action
+        btn.isHidden = true
+        btn.translatesAutoresizingMaskIntoConstraints = false
+        btn.widthAnchor.constraint(equalToConstant: 20).isActive = true
+        btn.heightAnchor.constraint(equalToConstant: 20).isActive = true
+        return btn
+    }
+
+    private func setupControlButtons() {
+        let stack = NSStackView(views: controlButtons)
+        stack.orientation = .horizontal
+        stack.spacing = 8
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.centerXAnchor.constraint(equalTo: centerXAnchor),
+            stack.centerYAnchor.constraint(equalTo: centerYAnchor)
+        ])
+    }
+
+    @objc private func prevTapped() { onPrev?() }
+    @objc private func playPauseTapped() { onPlayPause?() }
+    @objc private func nextTapped() { onNext?() }
 
     override func setFrameSize(_ newSize: NSSize) {
         let oldWidth = bounds.width
@@ -90,6 +130,27 @@ final class MenuBarLyricsView: NSView {
     }
 
     func refreshLayers() {
+        invalidateAndRebuild()
+    }
+
+    /// Called every poll (0.5s) — rebuilds animations only when position drifted from expectation.
+    func syncIfNeeded() {
+        guard isLayerMode,
+              let line = mc.currentLine,
+              line.time == anchorLineTime else { return }
+
+        let drift: Double
+        if isPlaying {
+            // Playing: position should advance with wall clock
+            let expected = anchorPosition + (CACurrentMediaTime() - anchorWallTime)
+            drift = abs(mc.playerPosition - expected)
+        } else {
+            // Paused: position should stay where we froze
+            drift = abs(mc.playerPosition - anchorPosition)
+        }
+        guard drift > 0.2 else { return }
+
+        print("[FlowX] Animation drift \(String(format: "%.2f", drift))s — rebuilding")
         invalidateAndRebuild()
     }
 
@@ -152,6 +213,11 @@ final class MenuBarLyricsView: NSView {
         let origin = CGPoint(x: startX, y: y)
 
         isLayerMode = true
+
+        // Record anchor for drift detection
+        anchorPosition = mc.playerPosition
+        anchorWallTime = CACurrentMediaTime()
+        anchorLineTime = line.time
 
         if karaoke {
             setupKaraokeLayers(parent: parentLayer, line: line, size: size, origin: origin,
@@ -421,7 +487,6 @@ final class MenuBarLyricsView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         if isHovering {
             setLayersHidden(true)
-            drawControls()
         } else if isLayerMode {
             NSGraphicsContext.current?.cgContext.clear(dirtyRect)
             setLayersHidden(false)
@@ -445,20 +510,6 @@ final class MenuBarLyricsView: NSView {
         )
     }
 
-    private func drawControls() {
-        let images = [prevImage, isPlaying ? pauseImage : playImage, nextImage]
-        let iconH: CGFloat = 14, gap: CGFloat = 20
-        let totalW = CGFloat(images.count) * iconH + CGFloat(images.count - 1) * gap
-        var x = (bounds.width - totalW) / 2
-        let y = (bounds.height - iconH) / 2
-
-        for img in images {
-            guard let img else { continue }
-            img.draw(in: NSRect(x: x, y: y, width: iconH, height: iconH))
-            x += iconH + gap
-        }
-    }
-
     // MARK: - Tracking area
 
     private func updateTrackingArea() {
@@ -474,28 +525,14 @@ final class MenuBarLyricsView: NSView {
 
     override func mouseEntered(with event: NSEvent) {
         isHovering = true
+        controlButtons.forEach { $0.isHidden = false }
         needsDisplay = true
     }
 
     override func mouseExited(with event: NSEvent) {
         isHovering = false
+        controlButtons.forEach { $0.isHidden = true }
         needsDisplay = true
         rebuildIfNeeded()
-    }
-
-    // MARK: - Click handling (divide into thirds)
-
-    override func mouseDown(with event: NSEvent) {
-        guard isHovering else { return }
-        let loc = convert(event.locationInWindow, from: nil)
-        let third = bounds.width / 3
-
-        if loc.x < third {
-            onPrev?()
-        } else if loc.x < third * 2 {
-            onPlayPause?()
-        } else {
-            onNext?()
-        }
     }
 }

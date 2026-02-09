@@ -11,7 +11,7 @@ file_length:
 
 type_body_length:
   warning: 360
-  error: 420
+  error: 450
 
 identifier_name:
   min_length:

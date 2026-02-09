@@ -24,6 +24,9 @@ final class MusicController: ObservableObject {
     private var lastWasInterlude: Bool = false
     private var currentCatalogId: String = ""
 
+    /// Called on main thread after each position poll
+    var onPositionUpdated: (() -> Void)?
+
     private init() {
         let app: AnyObject = SBApplication(bundleIdentifier: "com.apple.Music")!
         musicApp = unsafeBitCast(app, to: MusicApplication.self)
@@ -67,7 +70,14 @@ final class MusicController: ObservableObject {
             case "Stopped": newState = .stopped
             default:        newState = .unknown
             }
-            if newState != playerState { playerState = newState }
+            if newState != playerState {
+                // Sync position immediately on resume so animation rebuilds with accurate elapsed
+                if newState == .playing {
+                    playerPosition = musicApp.playerPosition
+                    updateCurrentLyric()
+                }
+                playerState = newState
+            }
             isMusicRunning = true
         }
 
@@ -119,14 +129,15 @@ final class MusicController: ObservableObject {
         currentCatalogId = ""
     }
 
-    // MARK: - Position polling (only active when playing)
+    // MARK: - Position polling (active whenever Music.app is running)
 
     private func pollPosition() {
-        guard isMusicRunning, playerState == .playing,
+        guard isMusicRunning,
               AppSettings.shared.showMenuBarLyrics else { return }
 
         playerPosition = musicApp.playerPosition
         updateCurrentLyric()
+        onPositionUpdated?()
     }
 
     // MARK: - Full state refresh (on launch only)
