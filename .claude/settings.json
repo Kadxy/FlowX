@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh api:*)",
+      "Bash(sdef:*)",
+      "WebFetch(domain:lrclib.net)",
+      "Bash(xcodebuild:*)",
+      "Bash(curl:*)",
+      "Bash(python3:*)",
+      "Skill(commit-commands:commit:*)",
+    ]
+  }
+}
