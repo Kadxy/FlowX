@@ -240,7 +240,7 @@ struct SettingsView: View {
                     .padding(16)
 
                     Divider().padding(.horizontal, 16)
-                    
+
                     SettingsRow("Edge Fade") {
                         HStack(spacing: 10) {
                             Slider(value: $menuBarEdgeFade, in: 0...40, step: 2)
