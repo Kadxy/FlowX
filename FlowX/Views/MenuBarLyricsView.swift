@@ -16,6 +16,8 @@ final class MenuBarLyricsView: NSView {
     private var brightImageLayer: CALayer?
     private var karaokeMask: CALayer?
     private var isLayerMode = false
+    private var edgeFadeLayer: CAGradientLayer?
+    private var edgeFadeWidth: CGFloat { CGFloat(AppSettings.shared.menuBarEdgeFadeWidth) }
 
     // Pre-cached SF Symbol images
     private let iconConfig = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
@@ -122,7 +124,7 @@ final class MenuBarLyricsView: NSView {
     }
 
     private func freezeAnimations() {
-        for l in [textImageLayer, dimImageLayer, brightImageLayer, karaokeMask].compactMap({ $0 }) {
+        for l in [textImageLayer, dimImageLayer, brightImageLayer, karaokeMask, edgeFadeLayer].compactMap({ $0 }) {
             guard l.speed != 0 else { continue }
             let pausedTime = l.convertTime(CACurrentMediaTime(), from: nil)
             l.speed = 0
@@ -146,7 +148,7 @@ final class MenuBarLyricsView: NSView {
         let duration = line.endTime - line.time
         let elapsed = max(0, min(mc.playerPosition - line.time, duration))
         let needsScroll = size.width > bounds.width
-        let startX = needsScroll ? 0 : (bounds.width - size.width) / 2
+        let startX: CGFloat = needsScroll ? 0 : (bounds.width - size.width) / 2
         let origin = CGPoint(x: startX, y: y)
 
         isLayerMode = true
@@ -158,6 +160,71 @@ final class MenuBarLyricsView: NSView {
             setupSingleLayer(parent: parentLayer, size: size, origin: origin,
                              scale: scale, duration: duration, elapsed: elapsed, needsScroll: needsScroll)
         }
+
+        if needsScroll {
+            let scrollTimes: (start: Double, end: Double)
+            if karaoke {
+                scrollTimes = scrollTimesForKaraoke(line: line, textWidth: size.width, duration: duration)
+            } else {
+                let lr: CGFloat = 0.65
+                let s = Double(min(0.85, bounds.width * lr / size.width))
+                let e = max(s + 0.05, 1.0 - Double(bounds.width * (1 - lr) / size.width))
+                scrollTimes = (s, e)
+            }
+            setupEdgeFade(on: parentLayer, scrollStart: scrollTimes.start,
+                          scrollEnd: scrollTimes.end, duration: duration, elapsed: elapsed)
+        }
+    }
+
+    private func scrollTimesForKaraoke(line: LyricLine, textWidth: CGFloat, duration: TimeInterval) -> (start: Double, end: Double) {
+        let leadEdge = bounds.width * 0.65, trailEdge = bounds.width * 0.35
+        var accWidth: CGFloat = 0, startT: Double = 0, endT: Double = 1
+        var foundStart = false
+        for (i, word) in line.words.enumerated() {
+            accWidth += cachedWordWidths[i]
+            let t = min(1.0, (word.end - line.time) / duration)
+            if !foundStart && accWidth >= leadEdge { startT = t; foundStart = true }
+            if accWidth >= textWidth - trailEdge { endT = min(1.0, t); break }
+        }
+        return (startT, max(endT, startT + 0.03))
+    }
+
+    private func setupEdgeFade(on parentLayer: CALayer, scrollStart: Double, scrollEnd: Double,
+                                duration: TimeInterval, elapsed: TimeInterval) {
+        let fade = CAGradientLayer()
+        fade.frame = parentLayer.bounds
+        fade.startPoint = CGPoint(x: 0, y: 0.5)
+        fade.endPoint = CGPoint(x: 1, y: 0.5)
+
+        let inset = Double(edgeFadeWidth / bounds.width)
+        fade.colors = [NSColor.clear, .black, .black, .clear].map(\.cgColor)
+        fade.locations = [0, 0, NSNumber(value: 1 - inset), 1]
+
+        let noLeft:  [NSNumber] = [0, 0, NSNumber(value: 1 - inset), 1]
+        let both:    [NSNumber] = [0, NSNumber(value: inset), NSNumber(value: 1 - inset), 1]
+        let noRight: [NSNumber] = [0, NSNumber(value: inset), 1, 1]
+
+        // 0.3s 过渡，限制在滚动窗口的 1/3 以内
+        let tr = min(0.3 / duration, (scrollEnd - scrollStart) / 3)
+
+        let anim = CAKeyframeAnimation(keyPath: "locations")
+        anim.values = [noLeft, noLeft, both, both, noRight, noRight]
+        anim.keyTimes = [0,
+                         NSNumber(value: scrollStart),
+                         NSNumber(value: scrollStart + tr),
+                         NSNumber(value: scrollEnd - tr),
+                         NSNumber(value: scrollEnd),
+                         1]
+        anim.duration = duration
+        anim.calculationMode = .linear
+        anim.isRemovedOnCompletion = false
+        anim.fillMode = .both
+        anim.beginTime = CACurrentMediaTime() - elapsed
+        fade.add(anim, forKey: "edgeFade")
+        fade.cornerRadius = parentLayer.cornerRadius
+
+        parentLayer.mask = fade
+        edgeFadeLayer = fade
     }
 
     private func setupKaraokeLayers(
@@ -318,6 +385,8 @@ final class MenuBarLyricsView: NSView {
         textImageLayer = nil; dimImageLayer = nil; brightImageLayer = nil
         karaokeMask = nil
         cachedWordWidths = []
+        layer?.mask = nil
+        edgeFadeLayer = nil
         isLayerMode = false
     }
 
@@ -363,6 +432,7 @@ final class MenuBarLyricsView: NSView {
 
     private func setLayersHidden(_ hidden: Bool) {
         [textImageLayer, dimImageLayer, brightImageLayer].forEach { $0?.isHidden = hidden }
+        layer?.mask = hidden ? nil : edgeFadeLayer
     }
 
     private func drawStaticLyrics() {

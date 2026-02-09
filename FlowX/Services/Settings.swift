@@ -65,6 +65,11 @@ final class AppSettings {
         set { data["menuBarKaraoke"] = newValue; save() }
     }
 
+    var menuBarEdgeFadeWidth: Double {
+        get { min(40, max(0, data["menuBarEdgeFadeWidth"] as? Double ?? 24)) }
+        set { data["menuBarEdgeFadeWidth"] = min(40, max(0, newValue)); save() }
+    }
+
     /// "system", "en", or "zh-Hans"
     var language: String {
         get { data["language"] as? String ?? "system" }

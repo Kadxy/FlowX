@@ -169,6 +169,7 @@ struct SettingsView: View {
     @State private var menuBarLyricsWidth: Double = AppSettings.shared.menuBarLyricsWidth
     @State private var language: String = AppSettings.shared.language
     @State private var menuBarKaraoke: Bool = AppSettings.shared.menuBarKaraoke
+    @State private var menuBarEdgeFade: Double = AppSettings.shared.menuBarEdgeFadeWidth
     @State private var showRestartAlert = false
 
     var body: some View {
@@ -225,12 +226,29 @@ struct SettingsView: View {
                     SettingsRow("Lyrics Width") {
                         HStack(spacing: 10) {
                             Slider(value: $menuBarLyricsWidth, in: 120...320, step: 10)
-                                .frame(width: 150)
+                                .frame(width: 120)
                                 .onChange(of: menuBarLyricsWidth) { _, val in
                                     AppSettings.shared.menuBarLyricsWidth = val
                                     NotificationCenter.default.post(name: .menuBarLyricsWidthChanged, object: nil)
                                 }
                             Text("\(Int(menuBarLyricsWidth)) pt")
+                                .font(.system(.body, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 50, alignment: .trailing)
+                        }
+                    }
+                    .padding(16)
+
+                    Divider().padding(.horizontal, 16)
+                    
+                    SettingsRow("Edge Fade") {
+                        HStack(spacing: 10) {
+                            Slider(value: $menuBarEdgeFade, in: 0...40, step: 2)
+                                .frame(width: 120)
+                                .onChange(of: menuBarEdgeFade) { _, val in
+                                    AppSettings.shared.menuBarEdgeFadeWidth = val
+                                }
+                            Text("\(Int(menuBarEdgeFade)) pt")
                                 .font(.system(.body, design: .monospaced))
                                 .foregroundStyle(.secondary)
                                 .frame(width: 50, alignment: .trailing)
@@ -250,6 +268,7 @@ struct SettingsView: View {
                             }
                     }
                     .padding(16)
+
                 }
                 .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10))
             }
