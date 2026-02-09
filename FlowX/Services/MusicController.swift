@@ -275,7 +275,7 @@ final class MusicController: ObservableObject {
 
     func playPause() { musicApp.playpause() }
     func nextTrack() { musicApp.nextTrack() }
-    func previousTrack() { musicApp.previousTrack() }
+    func backTrack() { musicApp.backTrack() }
 
     func revealInMusic() {
         guard let track = musicApp.currentTrack else { return }

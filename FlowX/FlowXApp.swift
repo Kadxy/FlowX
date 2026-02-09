@@ -45,7 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         lyricsView = MenuBarLyricsView(frame: NSRect(x: 0, y: 0, width: w, height: 22))
         lyricsView.font = NSFont.systemFont(ofSize: 14)
-        lyricsView.onPrev = { [weak self] in self?.mc.previousTrack() }
+        lyricsView.onPrev = { [weak self] in self?.mc.backTrack() }
         lyricsView.onPlayPause = { [weak self] in self?.mc.playPause() }
         lyricsView.onNext = { [weak self] in self?.mc.nextTrack() }
         lyricsItem.button?.addSubview(lyricsView)
