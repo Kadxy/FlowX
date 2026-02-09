@@ -50,6 +50,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lyricsView.onNext = { [weak self] in self?.mc.nextTrack() }
         lyricsItem.button?.addSubview(lyricsView)
 
+        mc.onPositionUpdated = { [weak self] in self?.lyricsView.syncIfNeeded() }
+
         applyMenuBarVisibility()
         updateMenuBar()
 
@@ -106,10 +108,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         desktopLyricsItem.isEnabled = false
         menu.addItem(desktopLyricsItem)
 
-        let musicIslandItem = NSMenuItem(title: String(localized: "Music Island"), action: nil, keyEquivalent: "")
-        musicIslandItem.image = NSImage(systemSymbolName: "rectangle.inset.filled", accessibilityDescription: nil)
-        musicIslandItem.isEnabled = false
-        menu.addItem(musicIslandItem)
+        let notchPlayerItem = NSMenuItem(title: String(localized: "Notch Player"), action: nil, keyEquivalent: "")
+        notchPlayerItem.image = NSImage(systemSymbolName: "rectangle.inset.filled", accessibilityDescription: nil)
+        notchPlayerItem.isEnabled = false
+        menu.addItem(notchPlayerItem)
 
         menu.addItem(NSMenuItem.separator())
 
