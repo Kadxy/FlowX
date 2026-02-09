@@ -3,57 +3,67 @@ import os
 
 private let logger = Logger(subsystem: "com.kadxy.FlowX", category: "NowPlaying")
 
-/// 通过 MediaRemote 私有框架获取当前播放曲目的 Adam ID (catalog song ID)
-/// 需要 app 使用有效开发者证书签名（非 ad-hoc），否则 mediaremoted 会拒绝访问
+/// 通过 osascript + MRNowPlayingRequest 获取当前播放曲目的 Adam ID
+/// macOS 15.4+ mediaremoted 限制了直接调用 MRMediaRemoteGetNowPlayingInfo，
+/// 但 /usr/bin/osascript 作为系统二进制可以加载私有框架并访问 MRNowPlayingRequest
 enum NowPlayingService {
-    private static let bundle: CFBundle? = {
-        CFBundleCreate(
-            kCFAllocatorDefault,
-            NSURL(fileURLWithPath: "/System/Library/PrivateFrameworks/MediaRemote.framework")
-        )
-    }()
 
-    private typealias MRGetNowPlayingInfo = @convention(c) (DispatchQueue, @escaping (CFDictionary) -> Void) -> Void
-    private typealias MRRegister = @convention(c) (DispatchQueue) -> Void
+    private static let script = """
+        use scripting additions
+        use framework "/System/Library/PrivateFrameworks/MediaRemote.framework"
 
-    private static let getNowPlayingInfoFunc: MRGetNowPlayingInfo? = {
-        guard let bundle,
-              let ptr = CFBundleGetFunctionPointerForName(bundle, "MRMediaRemoteGetNowPlayingInfo" as CFString)
-        else {
-            logger.error("Failed to load MRMediaRemoteGetNowPlayingInfo")
-            return nil
-        }
-        return unsafeBitCast(ptr, to: MRGetNowPlayingInfo.self)
-    }()
+        set MRNowPlayingRequest to current application's NSClassFromString("MRNowPlayingRequest")
 
-    /// 必须在 app 启动时调用，注册后才能访问 NowPlaying 信息
-    static func register() {
-        guard let bundle,
-              let ptr = CFBundleGetFunctionPointerForName(bundle, "MRMediaRemoteRegisterForNowPlayingNotifications" as CFString)
-        else {
-            logger.error("Failed to load MRMediaRemoteRegisterForNowPlayingNotifications")
-            return
-        }
-        unsafeBitCast(ptr, to: MRRegister.self)(DispatchQueue.main)
-        logger.info("Registered for NowPlaying notifications")
-    }
+        if MRNowPlayingRequest's localNowPlayingItem() is missing value then
+            return ""
+        end if
+
+        set infoDict to MRNowPlayingRequest's localNowPlayingItem()'s nowPlayingInfo()
+
+        set storeId to infoDict's valueForKey:"kMRMediaRemoteNowPlayingInfoiTunesStoreIdentifier"
+        if storeId is missing value then
+            set storeId to infoDict's valueForKey:"kMRMediaRemoteNowPlayingInfoiTunesStoreSubscriptionAdamIdentifier"
+        end if
+
+        if storeId is missing value then
+            return ""
+        end if
+
+        return (storeId as real) as text
+        """
 
     /// 获取当前播放曲目的 Adam ID (catalog song ID)
     static func getNowPlayingAdamID() async -> String? {
-        guard let fn = getNowPlayingInfoFunc else { return nil }
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+                process.arguments = ["-e", script]
 
-        return await withCheckedContinuation { continuation in
-            fn(DispatchQueue.main) { info in
-                let dict = info as NSDictionary
+                let pipe = Pipe()
+                process.standardOutput = pipe
+                process.standardError = Pipe() // suppress stderr
 
-                if let id = dict["kMRMediaRemoteNowPlayingInfoiTunesStoreIdentifier"] as? Int, id > 0 {
-                    logger.info("Adam ID: \(id)")
-                    continuation.resume(returning: String(id))
-                } else if let id = dict["kMRMediaRemoteNowPlayingInfoiTunesStoreSubscriptionAdamIdentifier"] as? Int, id > 0 {
-                    logger.info("Adam ID (subscription): \(id)")
-                    continuation.resume(returning: String(id))
-                } else {
-                    logger.info("No Adam ID found")
+                do {
+                    try process.run()
+                    process.waitUntilExit()
+
+                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                    let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+                    if output.isEmpty {
+                        logger.debug("No Adam ID from osascript")
+                        continuation.resume(returning: nil)
+                    } else if let num = Double(output) {
+                        let id = String(Int64(num))
+                        logger.info("Adam ID: \(id)")
+                        continuation.resume(returning: id)
+                    } else {
+                        logger.warning("Unexpected osascript output: \(output)")
+                        continuation.resume(returning: nil)
+                    }
+                } catch {
+                    logger.error("osascript failed: \(error.localizedDescription)")
                     continuation.resume(returning: nil)
                 }
             }

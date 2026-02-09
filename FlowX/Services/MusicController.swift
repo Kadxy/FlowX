@@ -171,7 +171,6 @@ final class MusicController: ObservableObject {
         guard AppSettings.shared.showMenuBarLyrics else { return }
         let track = currentTrack
         Task {
-            // 通过 MediaRemote 拿 Adam ID
             let adamId = await NowPlayingService.getNowPlayingAdamID() ?? ""
             let lines = await amLyrics.fetchLyrics(
                 trackName: track.title,
