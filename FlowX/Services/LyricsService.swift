@@ -3,13 +3,6 @@ import os
 
 private let logger = Logger(subsystem: "com.kadxy.FlowX", category: "Lyrics")
 
-struct CatalogSong {
-    let id: String
-    let name: String
-    let artist: String
-    let duration: TimeInterval
-}
-
 final class LyricsService {
     private let session: URLSession
     private var settings: AppSettings { AppSettings.shared }
@@ -27,106 +20,33 @@ final class LyricsService {
         session = URLSession(configuration: config)
     }
 
-    func fetchLyrics(trackName: String, artistName: String, duration: TimeInterval, persistentID: String) async -> [LyricLine]? {
-        // 1. Disk cache: {persistentID}-{catalogSongId}.ttml
-        if !persistentID.isEmpty, let cached = findCachedFile(persistentID: persistentID) {
-            logger.info("Disk cache hit: \(trackName) (\(persistentID) → \(cached.catalogId))")
-            let lines = TTMLParser.parse(cached.ttml)
+    func fetchLyrics(trackName: String, artistName: String, catalogId: String) async -> [LyricLine]? {
+        guard !catalogId.isEmpty else {
+            logger.warning("No catalog ID for: \(trackName)")
+            return nil
+        }
+
+        // 1. Disk cache: {catalogId}.ttml
+        if let ttml = loadCachedTTML(catalogId: catalogId) {
+            logger.debug("Disk cache hit: \(trackName) (\(catalogId))")
+            let lines = TTMLParser.parse(ttml)
             return lines.isEmpty ? nil : lines
         }
 
-        logger.info("Fetching: \(trackName) - \(artistName)")
+        logger.debug("Fetching TTML lyrics: \(trackName) - \(artistName) (\(catalogId))")
 
-        // 2. Catalog search
-        guard let songId = await searchCatalog(name: trackName, artist: artistName, duration: duration) else {
-            logger.info("✗ Song not found")
-            return nil
-        }
-        logger.info("Found catalogSongId: \(songId)")
-
-        // 3. Fetch TTML lyrics
-        guard let ttml = await fetchSyllableLyrics(songId: songId) else {
-            logger.info("✗ No lyrics for songId \(songId)")
+        // 2. Fetch TTML lyrics
+        guard let ttml = await fetchSyllableLyrics(songId: catalogId) else {
+            logger.info("No lyrics for songId \(catalogId)")
             return nil
         }
 
-        // 4. Save TTML to disk
-        if !persistentID.isEmpty {
-            saveTTMLToDisk(ttml: ttml, persistentID: persistentID, catalogId: songId)
-        }
+        // 3. Save TTML to disk
+        saveTTMLToDisk(ttml: ttml, catalogId: catalogId)
 
         let lines = TTMLParser.parse(ttml)
-        logger.info("✓ Parsed \(lines.count) lines, first: '\(lines.first?.text ?? "")' @ \(String(format: "%.1f", lines.first?.time ?? 0))s")
+        logger.debug("Parsed \(lines.count) lines, first: '\(lines.first?.text ?? "")' @ \(String(format: "%.1f", lines.first?.time ?? 0))s")
         return lines.isEmpty ? nil : lines
-    }
-
-    // MARK: - Catalog Search
-
-    func searchCatalogResults(name: String, artist: String) async -> [CatalogSong] {
-        var c = URLComponents(string: "https://amp-api.music.apple.com/v1/catalog/\(settings.storefront)/search")
-        c?.queryItems = [
-            URLQueryItem(name: "term", value: "\(name) \(artist)"),
-            URLQueryItem(name: "types", value: "songs"),
-            URLQueryItem(name: "limit", value: "10"),
-            URLQueryItem(name: "l", value: "zh-Hans-CN")
-        ]
-        guard let url = c?.url, let data = await apiRequest(url: url) else { return [] }
-
-        do {
-            let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-            let results = json?["results"] as? [String: Any]
-            let songs = results?["songs"] as? [String: Any]
-            let songData = songs?["data"] as? [[String: Any]] ?? []
-
-            logger.info("  Catalog search returned \(songData.count) songs")
-
-            return songData.compactMap { song in
-                let id = song["id"] as? String ?? ""
-                let attrs = song["attributes"] as? [String: Any] ?? [:]
-                let durationMs = attrs["durationInMillis"] as? Double ?? 0
-                let songName = attrs["name"] as? String ?? ""
-                let songArtist = attrs["artistName"] as? String ?? ""
-                guard !id.isEmpty else { return nil }
-                return CatalogSong(id: id, name: songName, artist: songArtist, duration: durationMs / 1000.0)
-            }
-        } catch {
-            logger.info("  Catalog search parse error: \(error)")
-            return []
-        }
-    }
-
-    private func searchCatalog(name: String, artist: String, duration: TimeInterval) async -> String? {
-        let results = await searchCatalogResults(name: name, artist: artist)
-        guard !results.isEmpty else { return nil }
-
-        var bestId: String?
-        var bestDiff = Double.infinity
-        var bestExact = false
-
-        for song in results {
-            let diff = abs(song.duration - duration)
-            let isExactTitle = song.name == name
-
-            let durStr = String(format: "%.1f", song.duration)
-            let diffStr = String(format: "%.1f", diff)
-            let exact = isExactTitle ? " ✓exact" : ""
-            logger.info("  [\(song.id)] '\(song.name)' by '\(song.artist)', dur=\(durStr)s (Δ\(diffStr)s)\(exact)")
-
-            let dominated: Bool
-            if isExactTitle != bestExact {
-                dominated = isExactTitle
-            } else {
-                dominated = diff < bestDiff
-            }
-            if dominated {
-                bestDiff = diff
-                bestId = song.id
-                bestExact = isExactTitle
-            }
-        }
-
-        if bestDiff < 5, let id = bestId { return id }
-        return results.first?.id
     }
 
     // MARK: - Fetch syllable lyrics
@@ -138,7 +58,7 @@ final class LyricsService {
             URLQueryItem(name: "l[script]", value: "zh-Hans"),
             URLQueryItem(name: "extend", value: "ttmlLocalizations")
         ]
-        guard let url = c?.url, let data = await apiRequest(url: url, needsUserToken: true) else { return nil }
+        guard let url = c?.url, let data = await apiRequest(url: url) else { return nil }
 
         do {
             let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
@@ -162,48 +82,22 @@ final class LyricsService {
         }
     }
 
-    // MARK: - Disk Cache (filename: {persistentID}-{catalogSongId}.ttml)
+    // MARK: - Disk Cache (filename: {catalogId}.ttml)
 
-    func cachedFileURL(persistentID: String) -> URL? {
-        guard let cached = findCachedFile(persistentID: persistentID) else { return nil }
-        let filename = "\(persistentID)-\(cached.catalogId).ttml"
-        return Self.cacheDir.appendingPathComponent(filename)
+    func cachedFileURL(catalogId: String) -> URL? {
+        let file = Self.cacheDir.appendingPathComponent("\(catalogId).ttml")
+        return FileManager.default.fileExists(atPath: file.path) ? file : nil
     }
 
-    func deleteCachedFile(persistentID: String) {
-        guard let files = try? FileManager.default.contentsOfDirectory(atPath: Self.cacheDir.path) else { return }
-        for file in files where file.hasPrefix("\(persistentID)-") && file.hasSuffix(".ttml") {
-            try? FileManager.default.removeItem(at: Self.cacheDir.appendingPathComponent(file))
-            logger.info("Deleted cache: \(file)")
-        }
+    private func loadCachedTTML(catalogId: String) -> String? {
+        let file = Self.cacheDir.appendingPathComponent("\(catalogId).ttml")
+        return try? String(contentsOf: file, encoding: .utf8)
     }
 
-    func fetchAndCacheLyrics(songId: String, persistentID: String) async -> [LyricLine]? {
-        guard let ttml = await fetchSyllableLyrics(songId: songId) else {
-            logger.info("✗ No lyrics for songId \(songId)")
-            return nil
-        }
-        if !persistentID.isEmpty {
-            deleteCachedFile(persistentID: persistentID)
-            saveTTMLToDisk(ttml: ttml, persistentID: persistentID, catalogId: songId)
-        }
-        let lines = TTMLParser.parse(ttml)
-        return lines.isEmpty ? nil : lines
-    }
-
-    private func findCachedFile(persistentID: String) -> (ttml: String, catalogId: String)? {
-        guard let files = try? FileManager.default.contentsOfDirectory(atPath: Self.cacheDir.path) else { return nil }
-        guard let match = files.first(where: { $0.hasPrefix("\(persistentID)-") && $0.hasSuffix(".ttml") }) else { return nil }
-        let catalogId = String(match.dropFirst(persistentID.count + 1).dropLast(5)) // remove "{pid}-" and ".ttml"
-        let file = Self.cacheDir.appendingPathComponent(match)
-        guard let ttml = try? String(contentsOf: file, encoding: .utf8) else { return nil }
-        return (ttml, catalogId)
-    }
-
-    private func saveTTMLToDisk(ttml: String, persistentID: String, catalogId: String) {
-        let file = Self.cacheDir.appendingPathComponent("\(persistentID)-\(catalogId).ttml")
+    private func saveTTMLToDisk(ttml: String, catalogId: String) {
+        let file = Self.cacheDir.appendingPathComponent("\(catalogId).ttml")
         try? ttml.write(to: file, atomically: true, encoding: .utf8)
-        logger.info("  Cached TTML → \(persistentID)-\(catalogId).ttml")
+        logger.debug("Cached TTML → \(catalogId).ttml")
     }
 
     // MARK: - API Request
@@ -211,12 +105,10 @@ final class LyricsService {
     private static let userAgent =
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
 
-    private func apiRequest(url: URL, needsUserToken: Bool = false) async -> Data? {
+    private func apiRequest(url: URL) async -> Data? {
         var req = URLRequest(url: url)
         req.setValue("Bearer \(settings.developerToken)", forHTTPHeaderField: "authorization")
-        if needsUserToken {
-            req.setValue(settings.userToken, forHTTPHeaderField: "media-user-token")
-        }
+        req.setValue(settings.userToken, forHTTPHeaderField: "media-user-token")
         req.setValue("https://music.apple.com", forHTTPHeaderField: "origin")
         req.setValue("https://music.apple.com/", forHTTPHeaderField: "referer")
         req.setValue(Self.userAgent, forHTTPHeaderField: "user-agent")
@@ -227,12 +119,12 @@ final class LyricsService {
             let (data, resp) = try await session.data(for: req)
             let status = (resp as? HTTPURLResponse)?.statusCode ?? -1
             if !(200...299).contains(status) {
-                logger.info("  API \(url.path) → HTTP \(status)")
+                logger.warning("API \(url.path) → HTTP \(status)")
                 return nil
             }
             return data
         } catch {
-            logger.info("  API error: \(error.localizedDescription)")
+            logger.error("API error: \(error.localizedDescription)")
             return nil
         }
     }

@@ -233,9 +233,6 @@
         }
       }
     },
-    "Clear Cache & Reload" : {
-
-    },
     "Coming Soon" : {
       "localizations" : {
         "de" : {
@@ -822,9 +819,6 @@
     "Music Island" : {
 
     },
-    "No Results" : {
-
-    },
     "Open in Apple Music" : {
       "localizations" : {
         "de" : {
@@ -1056,12 +1050,6 @@
           }
         }
       }
-    },
-    "Searching..." : {
-
-    },
-    "Select Lyrics..." : {
-
     },
     "Settings..." : {
       "localizations" : {
