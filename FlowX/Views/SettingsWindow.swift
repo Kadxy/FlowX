@@ -15,7 +15,6 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         window.center()
         window.isReleasedWhenClosed = false
         window.collectionBehavior = [.managed, .participatesInCycle]
-        window.level = .normal
         window.setContentSize(NSSize(width: 520, height: 720))
         window.minSize = NSSize(width: 520, height: 720)
         window.maxSize = NSSize(width: 520, height: 720)
@@ -31,7 +30,6 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         DispatchQueue.main.async {
             self.window?.center()
             self.window?.makeKeyAndOrderFront(nil)
-            NSApp.activate()
         }
     }
 
@@ -148,7 +146,7 @@ private let languages: [(code: String, label: String)] = {
             return (code, name.prefix(1).uppercased() + name.dropFirst())
         }
         .sorted { $0.label.localizedCompare($1.label) == .orderedAscending }
-    list.insert(("system", "System"), at: 0)
+    list.insert(("system", String(localized: "System")), at: 0)
     return list
 }()
 

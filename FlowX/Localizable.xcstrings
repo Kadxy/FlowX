@@ -117,7 +117,7 @@
         }
       }
     },
-    "© 2025 kadxy. All rights reserved." : {
+    "© 2026 kadxy" : {
 
     },
     "♪ Not Playing" : {
@@ -177,6 +177,9 @@
           }
         }
       }
+    },
+    "A new version v%@ is available." : {
+
     },
     "About FlowX" : {
 
@@ -240,6 +243,12 @@
       }
     },
     "Apple Music Not Found" : {
+
+    },
+    "Check Failed" : {
+
+    },
+    "Check for Updates" : {
 
     },
     "Coming Soon" : {
@@ -359,6 +368,9 @@
           }
         }
       }
+    },
+    "Download" : {
+
     },
     "Edge Fade" : {
 
@@ -484,6 +496,9 @@
           }
         }
       }
+    },
+    "GitHub" : {
+
     },
     "Karaoke Effect" : {
       "localizations" : {
@@ -889,6 +904,9 @@
         }
       }
     },
+    "OK" : {
+
+    },
     "Open in Apple Music" : {
       "localizations" : {
         "de" : {
@@ -1240,6 +1258,76 @@
         }
       }
     },
+    "System" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "System"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sistema"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Système"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "システム"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "시스템"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sistema"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Системный"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跟随系统"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跟隨系統"
+          }
+        }
+      }
+    },
+    "Unable to connect to GitHub." : {
+
+    },
+    "Unable to get version info from GitHub." : {
+
+    },
+    "Up to Date" : {
+
+    },
+    "Update Available" : {
+
+    },
     "User Token" : {
       "localizations" : {
         "de" : {
@@ -1309,6 +1397,9 @@
       }
     },
     "View Lyrics File" : {
+
+    },
+    "You're running the latest version." : {
 
     }
   },

@@ -170,7 +170,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AppSettings.shared.showMenuBarLyrics = newValue
         menuBarLyricsItem.state = newValue ? .on : .off
         applyMenuBarVisibility()
-        if newValue { updateMenuBar() }
+        if newValue {
+            mc.fetchLyricsIfNeeded()
+            updateMenuBar()
+        }
     }
 
     @objc private func viewLyricsFile() {

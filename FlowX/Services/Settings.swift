@@ -16,11 +16,22 @@ final class AppSettings: ObservableObject {
 
     private static let filePath = configDir.appendingPathComponent("settings.json")
 
+    /// Derive the default storefront from the user's system region, validated against known iTunes country codes.
+    private static let defaultStorefront: String = {
+        guard let region = Locale.current.region?.identifier.lowercased() else { return "us" }
+        guard let url = Bundle.main.url(forResource: "itunes_country_codes", withExtension: "json"),
+              let data = try? Data(contentsOf: url),
+              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: String]
+        else { return region }
+        let knownCodes = Set(dict.keys.map { $0.lowercased() })
+        return knownCodes.contains(region) ? region : "us"
+    }()
+
     // MARK: - Token Config
 
     @Published var developerToken: String = ""
     @Published var userToken: String = ""
-    @Published var storefront: String = "cn"
+    @Published var storefront: String = AppSettings.defaultStorefront
 
     // MARK: - UI Config
 
@@ -48,7 +59,7 @@ final class AppSettings: ObservableObject {
 
         developerToken = json["developerToken"] as? String ?? ""
         userToken = json["userToken"] as? String ?? ""
-        storefront = json["storefront"] as? String ?? "cn"
+        storefront = json["storefront"] as? String ?? AppSettings.defaultStorefront
         menuBarLyricsWidth = json["menuBarLyricsWidth"] as? Double ?? 180
         showMenuBarLyrics = json["showMenuBarLyrics"] as? Bool ?? true
         menuBarKaraoke = json["menuBarKaraoke"] as? Bool ?? true
@@ -79,7 +90,7 @@ final class AppSettings: ObservableObject {
             "showMenuBarLyrics": showMenuBarLyrics,
             "menuBarKaraoke": menuBarKaraoke,
             "menuBarEdgeFadeWidth": menuBarEdgeFadeWidth,
-            "language": language,
+            "language": language
         ]
         if let raw = try? JSONSerialization.data(withJSONObject: dict, options: [.prettyPrinted, .sortedKeys]) {
             try? raw.write(to: Self.filePath, options: .atomic)

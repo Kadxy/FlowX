@@ -2,27 +2,30 @@ excluded:
   - FlowX/Bridge
 
 line_length:
-  warning: 150
-  error: 200
+  warning: 160
+  error: 240
 
 file_length:
-  warning: 450
-  error: 640
+  warning: 480
+  error: 720
 
 type_body_length:
   warning: 360
-  error: 450
+  error: 540
 
 identifier_name:
   min_length:
     warning: 1
-
-force_cast: warning
-
 type_name:
   min_length:
     warning: 1
 
 function_parameter_count:
-  warning: 8
-  error: 12
+  warning: 6
+  error: 8
+
+function_body_length:
+  warning: 80
+  error: 150
+
+force_cast: warning

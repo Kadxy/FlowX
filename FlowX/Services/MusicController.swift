@@ -286,6 +286,14 @@ final class MusicController: ObservableObject {
 
     // MARK: - Lyrics Management
 
+    /// Re-fetch lyrics for the current track if not already loaded.
+    /// Called when menu bar lyrics is toggled ON while a track is playing.
+    func fetchLyricsIfNeeded() {
+        guard !currentTrack.title.isEmpty, lyrics.isEmpty else { return }
+        lastFetchedTrackIdentity = ""
+        onTrackChanged()
+    }
+
     func cachedLyricsFileURL() -> URL? {
         guard !currentCatalogId.isEmpty else { return nil }
         return amLyrics.cachedFileURL(catalogId: currentCatalogId)
