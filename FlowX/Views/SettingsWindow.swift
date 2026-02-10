@@ -31,15 +31,11 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         DispatchQueue.main.async {
             self.window?.center()
             self.window?.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
+            NSApp.activate()
         }
     }
 
     func windowWillClose(_ notification: Notification) {
-        // Activate Finder so the desktop keeps focus instead of switching to the previous fullscreen app.
-        if let finder = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first {
-            finder.activate()
-        }
         NSApp.setActivationPolicy(.accessory)
     }
 }
@@ -320,9 +316,7 @@ struct SettingsView: View {
     }
 
     private func restartApp() {
-        let url = URL(fileURLWithPath: Bundle.main.resourcePath!)
-            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        NSWorkspace.shared.openApplication(at: url, configuration: .init())
+        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: .init())
         NSApp.terminate(nil)
     }
 }

@@ -15,7 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var logoItem: NSStatusItem!
     private var lyricsItem: NSStatusItem!
     private var lyricsView: MenuBarLyricsView!
-    private let mc = MusicController.shared
+    private lazy var mc = MusicController.shared
     private var cancellables = Set<AnyCancellable>()
     private lazy var menu = makeMenu()
     private var openInMusicItem: NSMenuItem!
@@ -27,6 +27,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Ensure Apple Music is installed — FlowX is designed exclusively for Apple Music
+        guard NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Music") != nil else {
+            let alert = NSAlert()
+            alert.messageText = String(localized: "Apple Music Not Found")
+            alert.informativeText = String(localized: "FlowX requires Apple Music to be installed on your Mac.")
+            alert.alertStyle = .critical
+            alert.addButton(withTitle: String(localized: "Quit"))
+            alert.runModal()
+            NSApp.terminate(nil)
+            return
+        }
+
         // Logo item, created first so it sits on the right
         logoItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)

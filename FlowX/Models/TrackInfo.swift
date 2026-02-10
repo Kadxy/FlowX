@@ -18,6 +18,6 @@ struct TrackInfo: Equatable {
     )
 
     var identity: String {
-        "\(title)-\(artist)-\(album)"
+        persistentID.isEmpty ? "\(title)-\(artist)-\(album)" : persistentID
     }
 }

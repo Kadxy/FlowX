@@ -52,7 +52,9 @@ final class LyricsService {
     // MARK: - Syllable Lyrics
 
     private func fetchSyllableLyrics(songId: String) async -> String? {
-        var c = URLComponents(string: "https://amp-api.music.apple.com/v1/catalog/\(settings.storefront)/songs/\(songId)/syllable-lyrics")
+        let encodedStorefront = settings.storefront.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? settings.storefront
+        let encodedSongId = songId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? songId
+        var c = URLComponents(string: "https://amp-api.music.apple.com/v1/catalog/\(encodedStorefront)/songs/\(encodedSongId)/syllable-lyrics")
         c?.queryItems = [
             URLQueryItem(name: "l[lyrics]", value: "zh-hans-cn"),
             URLQueryItem(name: "l[script]", value: "zh-Hans"),
@@ -84,18 +86,21 @@ final class LyricsService {
 
     // MARK: - Disk Cache
 
+    private func cacheFileURL(for catalogId: String) -> URL {
+        Self.cacheDir.appendingPathComponent("\(catalogId).ttml")
+    }
+
     func cachedFileURL(catalogId: String) -> URL? {
-        let file = Self.cacheDir.appendingPathComponent("\(catalogId).ttml")
+        let file = cacheFileURL(for: catalogId)
         return FileManager.default.fileExists(atPath: file.path) ? file : nil
     }
 
     private func loadCachedTTML(catalogId: String) -> String? {
-        let file = Self.cacheDir.appendingPathComponent("\(catalogId).ttml")
-        return try? String(contentsOf: file, encoding: .utf8)
+        try? String(contentsOf: cacheFileURL(for: catalogId), encoding: .utf8)
     }
 
     private func saveTTMLToDisk(ttml: String, catalogId: String) {
-        let file = Self.cacheDir.appendingPathComponent("\(catalogId).ttml")
+        let file = cacheFileURL(for: catalogId)
         try? ttml.write(to: file, atomically: true, encoding: .utf8)
         logger.debug("Cached TTML → \(catalogId).ttml")
     }

@@ -10,14 +10,14 @@ final class MenuBarLyricsView: NSView {
     private let iconConfig = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
         .applying(.init(hierarchicalColor: .labelColor))
 
-    private func symbol(_ name: String) -> NSImage? {
-        NSImage(systemSymbolName: name, accessibilityDescription: nil)?
+    private func symbol(_ name: String, accessibility: String? = nil) -> NSImage? {
+        NSImage(systemSymbolName: name, accessibilityDescription: accessibility)?
             .withSymbolConfiguration(iconConfig)
     }
 
-    private lazy var prevButton = makeControlButton("backward.end.fill", action: #selector(prevTapped))
-    private lazy var playPauseButton = makeControlButton("play.fill", action: #selector(playPauseTapped))
-    private lazy var nextButton = makeControlButton("forward.end.fill", action: #selector(nextTapped))
+    private lazy var prevButton = makeControlButton("backward.end.fill", accessibility: "Previous Track", action: #selector(prevTapped))
+    private lazy var playPauseButton = makeControlButton("play.fill", accessibility: "Play", action: #selector(playPauseTapped))
+    private lazy var nextButton = makeControlButton("forward.end.fill", accessibility: "Next Track", action: #selector(nextTapped))
     private lazy var controlButtons = [prevButton, playPauseButton, nextButton]
 
     var onPrev: (() -> Void)?
@@ -33,7 +33,8 @@ final class MenuBarLyricsView: NSView {
     var isPlaying: Bool = false {
         didSet {
             guard isPlaying != oldValue else { return }
-            playPauseButton.image = symbol(isPlaying ? "pause.fill" : "play.fill")
+            playPauseButton.image = symbol(isPlaying ? "pause.fill" : "play.fill",
+                                               accessibility: isPlaying ? "Pause" : "Play")
             if animationLayer.isAnimating {
                 if isPlaying { animationLayer.unfreeze() } else { animationLayer.freeze() }
             } else {
@@ -140,9 +141,9 @@ final class MenuBarLyricsView: NSView {
 
     // MARK: - Hover controls setup
 
-    private func makeControlButton(_ symbolName: String, action: Selector) -> NSButton {
+    private func makeControlButton(_ symbolName: String, accessibility: String? = nil, action: Selector) -> NSButton {
         let btn = NSButton()
-        btn.image = symbol(symbolName)
+        btn.image = symbol(symbolName, accessibility: accessibility)
         btn.bezelStyle = .regularSquare
         btn.isBordered = false
         btn.imagePosition = .imageOnly

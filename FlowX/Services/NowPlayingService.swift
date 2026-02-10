@@ -48,24 +48,35 @@ enum NowPlayingService {
 
                 do {
                     try process.run()
-                    process.waitUntilExit()
-
-                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                    let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-
-                    if output.isEmpty {
-                        logger.debug("No Adam ID from osascript")
-                        continuation.resume(returning: nil)
-                    } else if let num = Double(output) {
-                        let id = String(Int64(num))
-                        logger.info("Adam ID: \(id)")
-                        continuation.resume(returning: id)
-                    } else {
-                        logger.warning("Unexpected osascript output: \(output)")
-                        continuation.resume(returning: nil)
-                    }
                 } catch {
                     logger.error("osascript failed: \(error.localizedDescription)")
+                    continuation.resume(returning: nil)
+                    return
+                }
+
+                // Kill the process if it doesn't finish within 5 seconds
+                let timeout = DispatchWorkItem {
+                    guard process.isRunning else { return }
+                    logger.warning("osascript timed out, terminating")
+                    process.terminate()
+                }
+                DispatchQueue.global().asyncAfter(deadline: .now() + 5, execute: timeout)
+
+                process.waitUntilExit()
+                timeout.cancel()
+
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+                if output.isEmpty {
+                    logger.debug("No Adam ID from osascript")
+                    continuation.resume(returning: nil)
+                } else if let num = Double(output) {
+                    let id = String(Int64(num))
+                    logger.info("Adam ID: \(id)")
+                    continuation.resume(returning: id)
+                } else {
+                    logger.warning("Unexpected osascript output: \(output)")
                     continuation.resume(returning: nil)
                 }
             }

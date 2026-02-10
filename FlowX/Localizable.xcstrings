@@ -233,6 +233,9 @@
         }
       }
     },
+    "Apple Music Not Found" : {
+
+    },
     "Coming Soon" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -352,6 +355,9 @@
       }
     },
     "Edge Fade" : {
+
+    },
+    "FlowX requires Apple Music to be installed on your Mac." : {
 
     },
     "FlowX Settings" : {
@@ -928,6 +934,9 @@
           }
         }
       }
+    },
+    "Quit" : {
+
     },
     "Quit FlowX" : {
       "localizations" : {

@@ -104,12 +104,10 @@ final class AppSettings {
 
     func refreshDeveloperToken() async {
         do {
-            // Fetch Apple Music home page
             let homeURL = URL(string: "https://music.apple.com/us/home")!
             let (homeData, _) = try await URLSession.shared.data(from: homeURL)
             guard let html = String(data: homeData, encoding: .utf8) else { return }
 
-            // Find the index JS bundle URL
             guard let scriptMatch = html.range(of: #"(?<=src=")[^"]*?/assets/index~[^"]+\.js"#, options: .regularExpression) else {
                 logger.error("Could not find index JS bundle in HTML")
                 return
@@ -117,11 +115,9 @@ final class AppSettings {
             let jsPath = String(html[scriptMatch]).replacingOccurrences(of: "\"", with: "")
             let jsURL = URL(string: "https://music.apple.com\(jsPath)")!
 
-            // Fetch the JS bundle
             let (jsData, _) = try await URLSession.shared.data(from: jsURL)
             guard let js = String(data: jsData, encoding: .utf8) else { return }
 
-            // Pick the longest JWT in the bundle (the developer token)
             let regex = try NSRegularExpression(pattern: Self.jwtPattern)
             let matches = regex.matches(in: js, range: NSRange(js.startIndex..., in: js))
 
@@ -132,11 +128,13 @@ final class AppSettings {
             }
             let newToken = String(js[range])
 
-            if newToken != developerToken {
-                developerToken = newToken
-                logger.info("Developer token refreshed (\(newToken.prefix(32))...)")
-            } else {
-                logger.info("Developer token unchanged")
+            await MainActor.run {
+                if newToken != self.developerToken {
+                    self.developerToken = newToken
+                    logger.info("Developer token refreshed (\(newToken.prefix(32))...)")
+                } else {
+                    logger.info("Developer token unchanged")
+                }
             }
         } catch {
             logger.error("Token refresh error: \(error.localizedDescription)")

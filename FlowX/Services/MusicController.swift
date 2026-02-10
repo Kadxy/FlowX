@@ -27,6 +27,8 @@ final class MusicController: ObservableObject {
     /// Called on the main thread after each position poll.
     var onPositionUpdated: (() -> Void)?
 
+    private var pollTimer: Timer?
+
     private init() {
         let app: AnyObject = SBApplication(bundleIdentifier: "com.apple.Music")!
         musicApp = unsafeBitCast(app, to: MusicApplication.self)
@@ -52,6 +54,7 @@ final class MusicController: ObservableObject {
             self?.pollPosition()
         }
         RunLoop.main.add(timer, forMode: .common)
+        pollTimer = timer
 
         refreshState()
     }
