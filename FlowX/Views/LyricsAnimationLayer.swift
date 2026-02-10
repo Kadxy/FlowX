@@ -176,14 +176,14 @@ final class LyricsAnimationLayer: CALayer {
         karaoke: Bool, line: LyricLine?, textWidth: CGFloat, duration: TimeInterval
     ) -> (start: Double, end: Double) {
         if karaoke, let line = line {
-            let leadEdge = bounds.width * 0.65, trailEdge = bounds.width * 0.35
+            let center = bounds.width * 0.5
             var accWidth: CGFloat = 0, startT: Double = 0, endT: Double = 1
             var foundStart = false
             for (i, word) in line.words.enumerated() {
                 accWidth += cachedWordWidths[i]
                 let t = min(1.0, (word.end - line.time) / duration)
-                if !foundStart && accWidth >= leadEdge { startT = t; foundStart = true }
-                if accWidth >= textWidth - trailEdge { endT = min(1.0, t); break }
+                if !foundStart && accWidth >= center { startT = t; foundStart = true }
+                if accWidth >= textWidth - center { endT = min(1.0, t); break }
             }
             return (startT, max(endT, startT + 0.03))
         } else {
@@ -205,24 +205,56 @@ final class LyricsAnimationLayer: CALayer {
                                    startT: startRatio, endT: endRatio)
     }
 
-    /// Karaoke scroll: keeps the highlight edge at the 65% position of the view.
+    /// Karaoke scroll: tracks the highlight position word-by-word, keeping the sung word near the center of the view.
     private func makeHighlightFollowScroll(
         line: LyricLine, textWidth: CGFloat, duration: TimeInterval, elapsed: TimeInterval
     ) -> CAKeyframeAnimation {
-        let leadRatio: CGFloat = 0.65
-        let leadEdge = bounds.width * leadRatio, trailEdge = bounds.width * (1 - leadRatio)
-        var accWidth: CGFloat = 0, scrollStartT: Double = 0, scrollEndT: Double = 1
-        var foundStart = false
+        let maxScroll = textWidth - bounds.width
+        let center = bounds.width * 0.5
+
+        var values: [CGFloat] = [0]
+        var keyTimes: [NSNumber] = [0]
+        var accWidth: CGFloat = 0
+        var lastT: Double = 0
 
         for (i, word) in line.words.enumerated() {
-            accWidth += cachedWordWidths[i]
-            let t = min(1.0, (word.end - line.time) / duration)
-            if !foundStart && accWidth >= leadEdge { scrollStartT = t; foundStart = true }
-            if accWidth >= textWidth - trailEdge { scrollEndT = min(1.0, t); break }
+            let wordW = cachedWordWidths[i]
+            let t1 = max(0, (word.begin - line.time) / duration)
+            let t2 = min(1, (word.end - line.time) / duration)
+
+            // At word begin: highlight leading edge is at accWidth
+            if t1 > lastT {
+                let offset = min(maxScroll, max(0, accWidth - center))
+                keyTimes.append(NSNumber(value: t1))
+                values.append(-offset)
+                lastT = t1
+            }
+
+            accWidth += wordW
+
+            // At word end: highlight leading edge is at accWidth
+            if t2 > lastT {
+                let offset = min(maxScroll, max(0, accWidth - center))
+                keyTimes.append(NSNumber(value: t2))
+                values.append(-offset)
+                lastT = t2
+            }
         }
-        scrollEndT = max(scrollEndT, scrollStartT + 0.03)
-        return makeScrollKeyframes(textWidth: textWidth, duration: duration, elapsed: elapsed,
-                                   startT: scrollStartT, endT: scrollEndT)
+
+        if lastT < 1 {
+            keyTimes.append(1)
+            values.append(-maxScroll)
+        }
+
+        let anim = CAKeyframeAnimation(keyPath: "position.x")
+        anim.values = values
+        anim.keyTimes = keyTimes
+        anim.duration = duration
+        anim.calculationMode = .linear
+        anim.isRemovedOnCompletion = false
+        anim.fillMode = .both
+        anim.beginTime = CACurrentMediaTime() - elapsed
+        return anim
     }
 
     /// Scroll keyframes: [hold, hold, scroll-to-end, hold] with easeInEaseOut for the middle segment.
