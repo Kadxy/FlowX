@@ -817,6 +817,7 @@
       }
     },
     "Notch Player" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {

@@ -44,7 +44,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lyricsItem.button?.sendAction(on: [])
 
         lyricsView = MenuBarLyricsView(frame: NSRect(x: 0, y: 0, width: w, height: 22))
-        lyricsView.font = NSFont.systemFont(ofSize: 14)
         lyricsView.onPrev = { [weak self] in self?.mc.backTrack() }
         lyricsView.onPlayPause = { [weak self] in self?.mc.playPause() }
         lyricsView.onNext = { [weak self] in self?.mc.nextTrack() }
@@ -103,15 +102,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBarLyricsItem.state = AppSettings.shared.showMenuBarLyrics ? .on : .off
         menu.addItem(menuBarLyricsItem)
 
-        let desktopLyricsItem = NSMenuItem(title: String(localized: "Desktop Lyrics"), action: nil, keyEquivalent: "")
-        desktopLyricsItem.image = NSImage(systemSymbolName: "menubar.dock.rectangle", accessibilityDescription: nil)
-        desktopLyricsItem.isEnabled = false
-        menu.addItem(desktopLyricsItem)
+        // WIP: Desktop Lyrics
+        // let desktopLyricsItem = NSMenuItem(title: String(localized: "Desktop Lyrics"), action: nil, keyEquivalent: "")
+        // desktopLyricsItem.image = NSImage(systemSymbolName: "menubar.dock.rectangle", accessibilityDescription: nil)
+        // desktopLyricsItem.isEnabled = false
+        // menu.addItem(desktopLyricsItem)
 
-        let notchPlayerItem = NSMenuItem(title: String(localized: "Notch Player"), action: nil, keyEquivalent: "")
-        notchPlayerItem.image = NSImage(systemSymbolName: "rectangle.inset.filled", accessibilityDescription: nil)
-        notchPlayerItem.isEnabled = false
-        menu.addItem(notchPlayerItem)
+        // WIP: Notch Player
+        // let notchPlayerItem = NSMenuItem(title: String(localized: "Notch Player"), action: nil, keyEquivalent: "")
+        // notchPlayerItem.image = NSImage(systemSymbolName: "rectangle.inset.filled", accessibilityDescription: nil)
+        // notchPlayerItem.isEnabled = false
+        // menu.addItem(notchPlayerItem)
 
         menu.addItem(NSMenuItem.separator())
 
@@ -153,6 +154,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AppSettings.shared.showMenuBarLyrics = newValue
         menuBarLyricsItem.state = newValue ? .on : .off
         applyMenuBarVisibility()
+        if newValue { updateMenuBar() }
     }
 
     @objc private func viewLyricsFile() {

@@ -70,7 +70,6 @@ final class AppSettings {
         set { data["menuBarEdgeFadeWidth"] = min(40, max(0, newValue)); save() }
     }
 
-    /// "system", "en", or "zh-Hans"
     var language: String {
         get { data["language"] as? String ?? "system" }
         set {

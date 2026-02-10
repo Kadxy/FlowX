@@ -48,7 +48,7 @@ final class MusicController: ObservableObject {
         )
 
         // Lightweight position poll for lyric sync (only does work when playing)
-        let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 0.3, repeats: true) { [weak self] _ in
             self?.pollPosition()
         }
         RunLoop.main.add(timer, forMode: .common)
