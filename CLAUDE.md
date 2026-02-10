@@ -1,46 +1,19 @@
 # CLAUDE.md
 
-## User Requirements
-
-- Regardless of the language in which the question is asked or the context is provided, ALWAYS answer in Simplified Chinese.
-- Always follow Apple’s Human Interface Guidelines and best practices
-- Refactoring should not simplify or alter functionality, reduce readability, or violate best practices.
-- When working on requirements, don't spend energy on internationalization; that's a task for the end.
+- Always respond in Simplified Chinese regardless of input language.
+- Always follow Apple's Human Interface Guidelines and best practices.
+- Refactoring must not alter functionality, reduce readability, or violate best practices.
+- Don't spend energy on internationalization when working on features.
 
 ## Project Overview
 
-**Name:** FlowX (formerly NotchX)
-**Type:** macOS Menu Bar Application (LSUIElement, no Dock icon)
-**Goal:** A minimalist, native macOS menu bar lyrics viewer and controller exclusively for **Apple Music**.
-
-## Architecture
-
-```text
-FlowX/
-├── Bridge/            # ScriptingBridge (Music.h, generated from Music.app sdef)
-├── Models/            # TrackInfo, LyricLine, PlayerState
-├── Services/
-│   ├── MusicController.swift    # Singleton, polls Apple Music via ScriptingBridge
-│   ├── LyricsService.swift        # Catalog search → TTML fetch → disk cache
-│   └── TTMLParser.swift         # TTML XML → [LyricLine]
-└── Views/
-    ├── MenuBarLyricsView.swift # Scrolling lyrics/track info in menu bar
-    └── SettingsWindow.swift     # Status bar width config
-```
+FlowX — macOS 14.0+ menu bar lyrics viewer & controller for Apple Music.
+SwiftUI + AppKit (`NSStatusItem`), ScriptingBridge for Music control, sandbox disabled.
 
 ## Key Technical Decisions
 
-- **ScriptingBridge** controls Apple Music; `persistentID` (local hex ID) used as cache key
-- **No catalog songId from ScriptingBridge** — must search Apple Music API to resolve
-- **Search strategy:** Library search first (`/v1/me/library/search`), fallback to catalog search
-- **TTML cache:** `~/Library/Caches/FlowX/lyrics/{persistentID}-{catalogSongId}.ttml`
-- **Tokens** loaded from `.env` file (gitignored): `DEVELOPER_TOKEN`, `USER_TOKEN`, `STOREFRONT`
-- **Sandbox disabled** — required for ScriptingBridge to work
-
-## Tech Stack
-
-- **Platform:** macOS 14.0+
-- **Language:** Swift 5
-- **UI:** SwiftUI + AppKit (`NSStatusItem`, `MenuBarLyricsView` as NSView)
-- **Music Integration:** ScriptingBridge + Apple Music private API (`amp-api.music.apple.com`)
-- **Networking:** URLSession (async/await)
+- Adam ID (catalog song ID) obtained via osascript + MediaRemote private framework, bypassing macOS 15.4+ entitlement restrictions
+- TTML lyrics fetched from `amp-api.music.apple.com`, cached at `~/Library/Caches/FlowX/lyrics/{catalogId}.ttml`
+- Settings persisted as JSON at `~/Library/Application Support/FlowX/settings.json`
+- Developer token auto-refreshed from Apple Music web JS bundle
+- Menu bar rendering: pre-render text to CGImage + CALayer/CAAnimation (zero CPU)
