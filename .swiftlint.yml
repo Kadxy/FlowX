@@ -1,0 +1,31 @@
+excluded:
+  - FlowX/Bridge
+
+line_length:
+  warning: 160
+  error: 240
+
+file_length:
+  warning: 480
+  error: 720
+
+type_body_length:
+  warning: 360
+  error: 540
+
+identifier_name:
+  min_length:
+    warning: 1
+type_name:
+  min_length:
+    warning: 1
+
+function_parameter_count:
+  warning: 6
+  error: 8
+
+function_body_length:
+  warning: 80
+  error: 150
+
+force_cast: warning

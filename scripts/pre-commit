@@ -1,0 +1,24 @@
+#!/bin/sh
+
+if ! command -v swiftlint >/dev/null 2>&1; then
+  echo "error: SwiftLint not installed. Run: brew install swiftlint"
+  exit 1
+fi
+
+# Lint only staged .swift files
+STAGED=$(git diff --cached --name-only --diff-filter=ACM | grep '\.swift$')
+
+if [ -z "$STAGED" ]; then
+  exit 0
+fi
+
+FAILED=0
+echo "$STAGED" | while IFS= read -r file; do
+  swiftlint lint --strict --quiet "$file" || FAILED=1
+done
+
+if [ $FAILED -ne 0 ]; then
+  echo ""
+  echo "SwiftLint failed. Fix the issues above before committing."
+  exit 1
+fi
