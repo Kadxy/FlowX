@@ -4,9 +4,11 @@ import AppKit
 final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     static let shared = SettingsWindowController()
 
+    private static let windowSize = NSSize(width: 520, height: 720)
+
     private init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 520, height: 720),
+            contentRect: NSRect(origin: .zero, size: Self.windowSize),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
@@ -15,10 +17,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         window.center()
         window.isReleasedWhenClosed = false
         window.collectionBehavior = [.managed, .participatesInCycle]
-        window.setContentSize(NSSize(width: 520, height: 720))
-        window.minSize = NSSize(width: 520, height: 720)
-        window.maxSize = NSSize(width: 520, height: 720)
-        window.contentView = NSHostingView(rootView: SettingsView())
+        window.minSize = Self.windowSize
+        window.maxSize = Self.windowSize
         super.init(window: window)
         window.delegate = self
     }
@@ -26,15 +26,20 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     required init?(coder: NSCoder) { fatalError() }
 
     override func showWindow(_ sender: Any?) {
-        NSApp.setActivationPolicy(.regular)
-        DispatchQueue.main.async {
-            self.window?.center()
-            self.window?.makeKeyAndOrderFront(nil)
+        if window?.contentView == nil || !(window?.contentView is NSHostingView<SettingsView>) {
+            window?.contentView = NSHostingView(rootView: SettingsView())
         }
+        NSApp.setActivationPolicy(.regular)
+        window?.center()
+        window?.makeKeyAndOrderFront(nil)
+        NSApp.activate()
     }
 
     func windowWillClose(_ notification: Notification) {
-        NSApp.setActivationPolicy(.accessory)
+        window?.contentView = nil
+        if AboutWindowController.shared.window?.isVisible != true {
+            NSApp.setActivationPolicy(.accessory)
+        }
     }
 }
 

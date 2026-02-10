@@ -4,9 +4,11 @@ import AppKit
 final class AboutWindowController: NSWindowController, NSWindowDelegate {
     static let shared = AboutWindowController()
 
+    private static let windowSize = NSSize(width: 530, height: 220)
+
     private init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 300, height: 380),
+            contentRect: .zero,
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -17,10 +19,9 @@ final class AboutWindowController: NSWindowController, NSWindowDelegate {
         window.center()
         window.isReleasedWhenClosed = false
         window.collectionBehavior = [.managed, .participatesInCycle]
-        window.setContentSize(NSSize(width: 300, height: 380))
-        window.minSize = NSSize(width: 300, height: 380)
-        window.maxSize = NSSize(width: 300, height: 380)
-        window.contentView = NSHostingView(rootView: AboutView())
+        window.setContentSize(Self.windowSize)
+        window.minSize = Self.windowSize
+        window.maxSize = Self.windowSize
         super.init(window: window)
         window.delegate = self
     }
@@ -28,15 +29,20 @@ final class AboutWindowController: NSWindowController, NSWindowDelegate {
     required init?(coder: NSCoder) { fatalError() }
 
     override func showWindow(_ sender: Any?) {
-        NSApp.setActivationPolicy(.regular)
-        DispatchQueue.main.async {
-            self.window?.center()
-            self.window?.makeKeyAndOrderFront(nil)
+        if window?.contentView == nil || !(window?.contentView is NSHostingView<AboutView>) {
+            window?.contentView = NSHostingView(rootView: AboutView())
         }
+        NSApp.setActivationPolicy(.regular)
+        window?.center()
+        window?.makeKeyAndOrderFront(nil)
+        NSApp.activate()
     }
 
     func windowWillClose(_ notification: Notification) {
-        NSApp.setActivationPolicy(.accessory)
+        window?.contentView = nil
+        if SettingsWindowController.shared.window?.isVisible != true {
+            NSApp.setActivationPolicy(.accessory)
+        }
     }
 }
 
@@ -59,56 +65,52 @@ private struct AboutView: View {
     @State private var newVersionURL: URL?
 
     var body: some View {
-        VStack(spacing: 16) {
-            Spacer()
-
+        HStack(spacing: 0) {
             if let img = NSImage(named: "AppIcon") {
                 Image(nsImage: img)
                     .resizable()
-                    .frame(width: 96, height: 96)
-                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .frame(width: 128, height: 128)
+                    .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
                     .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
+                    .padding(.leading, 40)
+                    .padding(.trailing, 24)
             }
 
-            VStack(spacing: 4) {
+            VStack(alignment: .leading, spacing: 0) {
                 Text("FlowX")
-                    .font(.system(size: 20, weight: .bold))
+                    .font(.system(size: 32, weight: .bold))
+
                 Text("Version \(appVersion) (\(buildNumber))")
                     .font(.system(.body, design: .monospaced))
                     .foregroundStyle(.secondary)
-            }
+                    .padding(.top, 4)
 
-            Text("Menu bar lyrics for Apple Music")
-                .font(.subheadline)
-                .foregroundStyle(.tertiary)
+                Spacer()
 
-            Button(String(localized: "Check for Updates")) {
-                Task { await checkForUpdates() }
-            }
-            .controlSize(.small)
-            .disabled(isChecking)
-
-            Spacer()
-
-            Button {
-                NSWorkspace.shared.open(Self.repoURL)
-            } label: {
-                Text("GitHub")
+                Text("Copyright © 2026 Kadxy. All rights reserved.")
                     .font(.caption)
-                    .underline()
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .onHover { inside in
-                if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-            }
+                    .foregroundStyle(.tertiary)
 
-            Text("© 2026 kadxy")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+                Spacer()
+
+                HStack(spacing: 12) {
+                    Button(String(localized: "Check for Updates")) {
+                        Task { await checkForUpdates() }
+                    }
+                    .disabled(isChecking)
+
+                    Button("GitHub") {
+                        NSWorkspace.shared.open(Self.repoURL)
+                    }
+                }
+                .controlSize(.regular)
+            }
+            .padding(.trailing, 40)
+
+            Spacer(minLength: 0)
         }
-        .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.vertical, 30)
         .alert(alertTitle, isPresented: $showAlert) {
             if let url = newVersionURL {
                 Button(String(localized: "Download")) {
