@@ -28,9 +28,13 @@
 
 ## 安装
 
-从 [Releases](https://github.com/kadxy/FlowX/releases) 下载最新的 `FlowX-vX.X.X.zip`，解压后将 `FlowX.app` 拖入 `/Applications`。
+从 [Releases](https://github.com/kadxy/FlowX/releases) 下载最新的 `FlowX-vX.X.X.dmg`，打开后将 `FlowX.app` 拖入 `Applications`。
 
-> 由于应用未经公证，首次打开需右键点击 → **打开**，然后在弹窗中确认。
+> 应用未经公证，下载后需执行以下命令移除隔离属性：
+>
+> ```bash
+> xattr -cr /Applications/FlowX.app
+> ```
 
 ## 配置
 

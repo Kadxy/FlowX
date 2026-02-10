@@ -30,10 +30,23 @@ jobs:
         run: |
           mkdir -p export
           cp -R build/FlowX.xcarchive/Products/Applications/FlowX.app export/
-          cd export && zip -r ../FlowX-${{ github.ref_name }}.zip FlowX.app
+
+      - name: Create DMG
+        run: |
+          brew install create-dmg
+          create-dmg \
+            --volname "FlowX" \
+            --window-pos 200 120 \
+            --window-size 660 400 \
+            --icon-size 80 \
+            --icon "FlowX.app" 180 200 \
+            --app-drop-link 480 200 \
+            --hide-extension "FlowX.app" \
+            "FlowX-${{ github.ref_name }}.dmg" \
+            "export/"
 
       - name: Upload to Release
         uses: softprops/action-gh-release@v2
         with:
-          files: FlowX-${{ github.ref_name }}.zip
+          files: FlowX-${{ github.ref_name }}.dmg
           generate_release_notes: true
