@@ -334,8 +334,8 @@ final class LyricsAnimationLayer: CALayer {
 
         // Color states: solid = fully visible, edge = faded
         let noLeft  = [solid, solid, solid, edge]
-        let both    = [edge,  solid, solid, edge]
-        let noRight = [edge,  solid, solid, solid]
+        let both    = [edge, solid, solid, edge]
+        let noRight = [edge, solid, solid, solid]
 
         let desiredTr = 0.75 / duration
         let ahead = 0.15 / duration
