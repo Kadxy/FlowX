@@ -205,10 +205,9 @@ final class MusicController: ObservableObject {
 
     private static let interludeThreshold: TimeInterval = 5.0
 
-    private static func makeInterludeLine(start: TimeInterval, end: TimeInterval) -> LyricLine {
+    private static func makeInterludeLine(start: TimeInterval, end: TimeInterval, symbol: String = "♪") -> LyricLine {
         let gap = end - start
-        let count = gap >= 15 ? 5 : gap >= 10 ? 4 : 3
-        let symbol = "♪"
+        let count = min(6, max(3, Int(gap / 3)))
         let separator = "  "
         let text = Array(repeating: symbol, count: count).joined(separator: separator)
         let wordDuration = (end - start) / Double(count)
@@ -233,6 +232,12 @@ final class MusicController: ObservableObject {
             if line.time <= pos { activeIdx = i } else { break }
         }
 
+        // Detect intro: before the first lyric, gap >= threshold, and title shown for >= 3s
+        var isIntro = false
+        if activeIdx < 0, lyrics[0].time >= Self.interludeThreshold, pos >= 3.0 {
+            isIntro = true
+        }
+
         // Detect interlude: past current line's endTime with a large gap before the next line
         var isInterlude = false
         if activeIdx >= 0, lyrics[activeIdx].endTime > 0, pos > lyrics[activeIdx].endTime {
@@ -240,14 +245,22 @@ final class MusicController: ObservableObject {
             isInterlude = (nextStart - lyrics[activeIdx].endTime) >= Self.interludeThreshold
         }
 
-        guard activeIdx != lastActiveIndex || isInterlude != lastWasInterlude else { return }
+        let isSynthetic = isIntro || isInterlude
+        guard activeIdx != lastActiveIndex || isSynthetic != lastWasInterlude else { return }
         lastActiveIndex = activeIdx
-        lastWasInterlude = isInterlude
+        lastWasInterlude = isSynthetic
 
         if activeIdx < 0 {
-            currentLyricLine = ""
-            currentLine = nil
-            currentLineIndex = -1
+            if isIntro {
+                let line = Self.makeInterludeLine(start: pos, end: lyrics[0].time, symbol: "♫")
+                currentLyricLine = line.text
+                currentLine = line
+                currentLineIndex = -1
+            } else {
+                currentLyricLine = ""
+                currentLine = nil
+                currentLineIndex = -1
+            }
         } else if isInterlude {
             // Build a synthetic interlude LyricLine for karaoke animation
             let start = lyrics[activeIdx].endTime
