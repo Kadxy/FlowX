@@ -94,20 +94,6 @@ struct CharWrapTextView: NSViewRepresentable {
     }
 }
 
-// MARK: - Card Style
-
-private struct CardModifier: ViewModifier {
-    func body(content: Content) -> some View {
-        content
-            .padding(16)
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10))
-    }
-}
-
-private extension View {
-    func card() -> some View { modifier(CardModifier()) }
-}
-
 // MARK: - Row
 
 private struct SettingsRow<Content: View>: View {
@@ -167,12 +153,7 @@ private let languages: [(code: String, label: String)] = {
 }()
 
 struct SettingsView: View {
-    @State private var userToken: String = AppSettings.shared.userToken
-    @State private var storefront: String = AppSettings.shared.storefront
-    @State private var menuBarLyricsWidth: Double = AppSettings.shared.menuBarLyricsWidth
-    @State private var language: String = AppSettings.shared.language
-    @State private var menuBarKaraoke: Bool = AppSettings.shared.menuBarKaraoke
-    @State private var menuBarEdgeFade: Double = AppSettings.shared.menuBarEdgeFadeWidth
+    @ObservedObject private var settings = AppSettings.shared
     @State private var showRestartAlert = false
 
     var body: some View {
@@ -186,7 +167,7 @@ struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("User Token")
                             .font(.system(.body, weight: .medium))
-                        CharWrapTextView(text: $userToken)
+                        CharWrapTextView(text: $settings.userToken)
                             .frame(height: 80)
                             .background(
                                 Color.primary.opacity(0.04),
@@ -196,25 +177,19 @@ struct SettingsView: View {
                                 RoundedRectangle(cornerRadius: 6)
                                     .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
                             )
-                            .onChange(of: userToken) { _, val in
-                                AppSettings.shared.userToken = val
-                            }
                     }
                     .padding(16)
 
                     Divider().padding(.horizontal, 16)
 
                     SettingsRow("Storefront") {
-                        Picker("", selection: $storefront) {
+                        Picker("", selection: $settings.storefront) {
                             ForEach(storefronts, id: \.code) { sf in
                                 Text(sf.name).tag(sf.code)
                             }
                         }
                         .labelsHidden()
                         .frame(width: 280)
-                        .onChange(of: storefront) { _, val in
-                            AppSettings.shared.storefront = val
-                        }
                     }
                     .padding(16)
                 }
@@ -228,13 +203,9 @@ struct SettingsView: View {
                 VStack(spacing: 0) {
                     SettingsRow("Lyrics Width") {
                         HStack(spacing: 10) {
-                            Slider(value: $menuBarLyricsWidth, in: 120...320, step: 10)
+                            Slider(value: $settings.menuBarLyricsWidth, in: 120...320, step: 10)
                                 .frame(width: 120)
-                                .onChange(of: menuBarLyricsWidth) { _, val in
-                                    AppSettings.shared.menuBarLyricsWidth = val
-                                    NotificationCenter.default.post(name: .menuBarLyricsWidthChanged, object: nil)
-                                }
-                            Text("\(Int(menuBarLyricsWidth)) pt")
+                            Text("\(Int(settings.menuBarLyricsWidth)) pt")
                                 .font(.system(.body, design: .monospaced))
                                 .foregroundStyle(.secondary)
                                 .frame(width: 50, alignment: .trailing)
@@ -246,12 +217,9 @@ struct SettingsView: View {
 
                     SettingsRow("Edge Fade") {
                         HStack(spacing: 10) {
-                            Slider(value: $menuBarEdgeFade, in: 0...40, step: 2)
+                            Slider(value: $settings.menuBarEdgeFadeWidth, in: 0...40, step: 2)
                                 .frame(width: 120)
-                                .onChange(of: menuBarEdgeFade) { _, val in
-                                    AppSettings.shared.menuBarEdgeFadeWidth = val
-                                }
-                            Text("\(Int(menuBarEdgeFade)) pt")
+                            Text("\(Int(settings.menuBarEdgeFadeWidth)) pt")
                                 .font(.system(.body, design: .monospaced))
                                 .foregroundStyle(.secondary)
                                 .frame(width: 50, alignment: .trailing)
@@ -262,13 +230,9 @@ struct SettingsView: View {
                     Divider().padding(.horizontal, 16)
 
                     SettingsRow("Karaoke Effect") {
-                        Toggle("", isOn: $menuBarKaraoke)
+                        Toggle("", isOn: $settings.menuBarKaraoke)
                             .toggleStyle(.switch)
                             .labelsHidden()
-                            .onChange(of: menuBarKaraoke) { _, val in
-                                AppSettings.shared.menuBarKaraoke = val
-                                NotificationCenter.default.post(name: .menuBarKaraokeChanged, object: nil)
-                            }
                     }
                     .padding(16)
 
@@ -282,15 +246,14 @@ struct SettingsView: View {
 
                 VStack(spacing: 0) {
                     SettingsRow("Language") {
-                        Picker("", selection: $language) {
+                        Picker("", selection: $settings.language) {
                             ForEach(languages, id: \.code) { lang in
                                 Text(lang.label).tag(lang.code)
                             }
                         }
                         .labelsHidden()
                         .frame(width: 130)
-                        .onChange(of: language) { _, val in
-                            AppSettings.shared.language = val
+                        .onChange(of: settings.language) { _, _ in
                             showRestartAlert = true
                         }
                     }
@@ -305,13 +268,13 @@ struct SettingsView: View {
         .onTapGesture {
             NSApp.keyWindow?.makeFirstResponder(nil)
         }
-        .alert("Restart Required", isPresented: $showRestartAlert) {
-            Button("Restart Now") {
+        .alert(String(localized: "Restart Required"), isPresented: $showRestartAlert) {
+            Button(String(localized: "Restart Now")) {
                 restartApp()
             }
-            Button("Later", role: .cancel) {}
+            Button(String(localized: "Later"), role: .cancel) {}
         } message: {
-            Text("Language changed. Restart FlowX to apply.")
+            Text(String(localized: "Language changed. Restart FlowX to apply."))
         }
     }
 
@@ -319,9 +282,4 @@ struct SettingsView: View {
         NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: .init())
         NSApp.terminate(nil)
     }
-}
-
-extension Notification.Name {
-    static let menuBarLyricsWidthChanged = Notification.Name("menuBarLyricsWidthChanged")
-    static let menuBarKaraokeChanged = Notification.Name("menuBarKaraokeChanged")
 }

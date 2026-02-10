@@ -1,9 +1,10 @@
 import Foundation
+import Combine
 import os
 
 private let logger = Logger(subsystem: "com.kadxy.FlowX", category: "Settings")
 
-final class AppSettings {
+final class AppSettings: ObservableObject {
     static let shared = AppSettings()
 
     private static let configDir: URL = {
@@ -15,85 +16,82 @@ final class AppSettings {
 
     private static let filePath = configDir.appendingPathComponent("settings.json")
 
-    private var data: [String: Any]
-
-    private init() {
-        if let raw = try? Data(contentsOf: Self.filePath),
-           let json = try? JSONSerialization.jsonObject(with: raw) as? [String: Any] {
-            data = json
-        } else {
-            data = [:]
-        }
-
-        applyLanguage()
-
-        // Auto-refresh developer token in background
-        Task { await refreshDeveloperToken() }
-    }
-
     // MARK: - Token Config
 
-    var developerToken: String {
-        get { data["developerToken"] as? String ?? "" }
-        set { data["developerToken"] = newValue; save() }
-    }
-
-    var userToken: String {
-        get { data["userToken"] as? String ?? "" }
-        set { data["userToken"] = newValue; save() }
-    }
-
-    var storefront: String {
-        get { data["storefront"] as? String ?? "cn" }
-        set { data["storefront"] = newValue; save() }
-    }
+    @Published var developerToken: String = ""
+    @Published var userToken: String = ""
+    @Published var storefront: String = "cn"
 
     // MARK: - UI Config
 
-    var menuBarLyricsWidth: Double {
-        get { data["menuBarLyricsWidth"] as? Double ?? 180 }
-        set { data["menuBarLyricsWidth"] = newValue; save() }
+    @Published var menuBarLyricsWidth: Double = 180
+    @Published var showMenuBarLyrics: Bool = true
+    @Published var menuBarKaraoke: Bool = true
+    @Published var menuBarEdgeFadeWidth: Double = 24
+    @Published var language: String = "system"
+
+    private var cancellables = Set<AnyCancellable>()
+
+    private init() {
+        load()
+        applyLanguage()
+        setupObservers()
+        Task { await refreshDeveloperToken() }
     }
 
-    var showMenuBarLyrics: Bool {
-        get { data["showMenuBarLyrics"] as? Bool ?? true }
-        set { data["showMenuBarLyrics"] = newValue; save() }
+    // MARK: - Load / Save
+
+    private func load() {
+        guard let raw = try? Data(contentsOf: Self.filePath),
+              let json = try? JSONSerialization.jsonObject(with: raw) as? [String: Any]
+        else { return }
+
+        developerToken = json["developerToken"] as? String ?? ""
+        userToken = json["userToken"] as? String ?? ""
+        storefront = json["storefront"] as? String ?? "cn"
+        menuBarLyricsWidth = json["menuBarLyricsWidth"] as? Double ?? 180
+        showMenuBarLyrics = json["showMenuBarLyrics"] as? Bool ?? true
+        menuBarKaraoke = json["menuBarKaraoke"] as? Bool ?? true
+        menuBarEdgeFadeWidth = min(40, max(0, json["menuBarEdgeFadeWidth"] as? Double ?? 24))
+        language = json["language"] as? String ?? "system"
     }
 
-    var menuBarKaraoke: Bool {
-        get { data["menuBarKaraoke"] as? Bool ?? true }
-        set { data["menuBarKaraoke"] = newValue; save() }
+    private func setupObservers() {
+        // Auto-save on any property change (debounced to coalesce rapid updates)
+        objectWillChange
+            .debounce(for: .milliseconds(200), scheduler: RunLoop.main)
+            .sink { [weak self] in self?.save() }
+            .store(in: &cancellables)
+
+        // Apply language override when changed
+        $language
+            .dropFirst()
+            .sink { [weak self] _ in self?.applyLanguage() }
+            .store(in: &cancellables)
     }
 
-    var menuBarEdgeFadeWidth: Double {
-        get { min(40, max(0, data["menuBarEdgeFadeWidth"] as? Double ?? 24)) }
-        set { data["menuBarEdgeFadeWidth"] = min(40, max(0, newValue)); save() }
-    }
-
-    var language: String {
-        get { data["language"] as? String ?? "system" }
-        set {
-            data["language"] = newValue
-            save()
-            applyLanguage()
+    private func save() {
+        let dict: [String: Any] = [
+            "developerToken": developerToken,
+            "userToken": userToken,
+            "storefront": storefront,
+            "menuBarLyricsWidth": menuBarLyricsWidth,
+            "showMenuBarLyrics": showMenuBarLyrics,
+            "menuBarKaraoke": menuBarKaraoke,
+            "menuBarEdgeFadeWidth": menuBarEdgeFadeWidth,
+            "language": language,
+        ]
+        if let raw = try? JSONSerialization.data(withJSONObject: dict, options: [.prettyPrinted, .sortedKeys]) {
+            try? raw.write(to: Self.filePath, options: .atomic)
         }
     }
 
     /// Set AppleLanguages override based on current language setting.
-    /// Must be called before any localized strings are loaded.
     func applyLanguage() {
         if language == "system" {
             UserDefaults.standard.removeObject(forKey: "AppleLanguages")
         } else {
             UserDefaults.standard.set([language], forKey: "AppleLanguages")
-        }
-    }
-
-    // MARK: - Persistence
-
-    private func save() {
-        if let raw = try? JSONSerialization.data(withJSONObject: data, options: [.prettyPrinted, .sortedKeys]) {
-            try? raw.write(to: Self.filePath, options: .atomic)
         }
     }
 

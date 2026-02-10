@@ -22,10 +22,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuBarLyricsItem: NSMenuItem!
     private var viewLyricsFileItem: NSMenuItem!
 
-    private var menuBarLyricsWidth: CGFloat {
-        CGFloat(AppSettings.shared.menuBarLyricsWidth)
-    }
-
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Ensure Apple Music is installed — FlowX is designed exclusively for Apple Music
         guard NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Music") != nil else {
@@ -39,6 +35,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        let settings = AppSettings.shared
+
         // Logo item, created first so it sits on the right
         logoItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
@@ -51,7 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         logoItem.button?.sendAction(on: [.leftMouseUp])
 
         // Lyrics item, created second so it appears to the left
-        let w = menuBarLyricsWidth
+        let w = CGFloat(settings.menuBarLyricsWidth)
         lyricsItem = NSStatusBar.system.statusItem(withLength: w)
         lyricsItem.button?.sendAction(on: [])
 
@@ -66,15 +64,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         applyMenuBarVisibility()
         updateMenuBar()
 
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(onMenuBarLyricsWidthChanged),
-            name: .menuBarLyricsWidthChanged, object: nil
-        )
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(onMenuBarKaraokeChanged),
-            name: .menuBarKaraokeChanged, object: nil
-        )
+        // Observe settings changes
+        settings.$menuBarLyricsWidth
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] newWidth in
+                guard let self else { return }
+                let w = CGFloat(newWidth)
+                self.lyricsItem.length = w
+                self.lyricsView.frame = NSRect(x: 0, y: 0, width: w, height: 22)
+            }
+            .store(in: &cancellables)
 
+        Publishers.Merge(
+            settings.$menuBarKaraoke.dropFirst().map { _ in },
+            settings.$menuBarEdgeFadeWidth.dropFirst().map { _ in }
+        )
+        .receive(on: DispatchQueue.main)
+        .sink { [weak self] in
+            self?.lyricsView.refreshLayers()
+        }
+        .store(in: &cancellables)
+
+        // Observe music state
         mc.$currentLyricLine.removeDuplicates().receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.updateMenuBar() }.store(in: &cancellables)
         mc.$currentTrack.removeDuplicates().receive(on: DispatchQueue.main)
@@ -127,6 +139,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsItem.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: nil)
         menu.addItem(settingsItem)
 
+        let aboutItem = NSMenuItem(title: String(localized: "About FlowX"), action: #selector(openAbout), keyEquivalent: "")
+        aboutItem.target = self
+        aboutItem.image = NSImage(systemSymbolName: "info.circle", accessibilityDescription: nil)
+        menu.addItem(aboutItem)
+
         menu.addItem(NSMenuItem.separator())
 
         let quitItem = NSMenuItem(title: String(localized: "Quit FlowX"), action: #selector(quitApp), keyEquivalent: "q")
@@ -169,18 +186,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         SettingsWindowController.shared.showWindow(nil)
     }
 
+    @objc private func openAbout() {
+        AboutWindowController.shared.showWindow(nil)
+    }
+
     @objc private func quitApp() {
         NSApp.terminate(nil)
-    }
-
-    @objc private func onMenuBarLyricsWidthChanged() {
-        let w = menuBarLyricsWidth
-        lyricsItem.length = w
-        lyricsView.frame = NSRect(x: 0, y: 0, width: w, height: 22)
-    }
-
-    @objc private func onMenuBarKaraokeChanged() {
-        lyricsView.refreshLayers()
     }
 
     private func updateMenuBar() {

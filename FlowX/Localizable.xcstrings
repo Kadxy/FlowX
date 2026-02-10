@@ -117,6 +117,9 @@
         }
       }
     },
+    "© 2025 kadxy. All rights reserved." : {
+
+    },
     "♪ Not Playing" : {
       "localizations" : {
         "de" : {
@@ -174,6 +177,9 @@
           }
         }
       }
+    },
+    "About FlowX" : {
+
     },
     "Apple Music API" : {
       "localizations" : {
@@ -355,6 +361,9 @@
       }
     },
     "Edge Fade" : {
+
+    },
+    "FlowX" : {
 
     },
     "FlowX requires Apple Music to be installed on your Mac." : {
@@ -824,6 +833,9 @@
         }
       }
     },
+    "Menu bar lyrics for Apple Music" : {
+
+    },
     "Notch Player" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1282,6 +1294,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "使用者權杖"
+          }
+        }
+      }
+    },
+    "Version %@ (%@)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Version %1$@ (%2$@)"
           }
         }
       }
