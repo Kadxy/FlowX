@@ -99,18 +99,17 @@ final class AppSettings {
 
     // MARK: - Developer Token Auto-Refresh
 
-    /// General JWT regex
-    /// both the header and payload start with eyJ (i.e., base64url(`{"`)), and each segment is at least 20 characters long.
+    /// General JWT regex: header and payload start with `eyJ` (base64url of `{"`), each segment >= 20 chars.
     private static let jwtPattern = "eyJ[A-Za-z0-9_-]{20,}\\.eyJ[A-Za-z0-9_-]{20,}\\.[A-Za-z0-9_-]{20,}"
 
     func refreshDeveloperToken() async {
         do {
-            // 1. Fetch Apple Music home page
+            // Fetch Apple Music home page
             let homeURL = URL(string: "https://music.apple.com/us/home")!
             let (homeData, _) = try await URLSession.shared.data(from: homeURL)
             guard let html = String(data: homeData, encoding: .utf8) else { return }
 
-            // 2. Find the index JS bundle URL
+            // Find the index JS bundle URL
             guard let scriptMatch = html.range(of: #"(?<=src=")[^"]*?/assets/index~[^"]+\.js"#, options: .regularExpression) else {
                 logger.error("Could not find index JS bundle in HTML")
                 return
@@ -118,11 +117,11 @@ final class AppSettings {
             let jsPath = String(html[scriptMatch]).replacingOccurrences(of: "\"", with: "")
             let jsURL = URL(string: "https://music.apple.com\(jsPath)")!
 
-            // 3. Fetch the JS bundle
+            // Fetch the JS bundle
             let (jsData, _) = try await URLSession.shared.data(from: jsURL)
             guard let js = String(data: jsData, encoding: .utf8) else { return }
 
-            // 4. 匹配所有 JWT，取最长的（developer token 是 JS 里最长的 JWT）
+            // Pick the longest JWT in the bundle (the developer token)
             let regex = try NSRegularExpression(pattern: Self.jwtPattern)
             let matches = regex.matches(in: js, range: NSRange(js.startIndex..., in: js))
 

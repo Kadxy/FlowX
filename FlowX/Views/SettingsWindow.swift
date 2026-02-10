@@ -36,8 +36,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
-        // Activate Finder so the desktop keeps focus instead of
-        // switching back to the previous fullscreen app.
+        // Activate Finder so the desktop keeps focus instead of switching to the previous fullscreen app.
         if let finder = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first {
             finder.activate()
         }
@@ -149,7 +148,15 @@ private struct SectionHeader: View {
 
 // MARK: - Settings View
 
-private let storefronts = ["cn", "us", "jp"]
+/// Source: https://github.com/jcoester/iTunes-country-codes  (fetched 2026-02-10)
+private let storefronts: [(code: String, name: String)] = {
+    guard let url = Bundle.main.url(forResource: "itunes_country_codes", withExtension: "json"),
+          let data = try? Data(contentsOf: url),
+          let dict = try? JSONSerialization.jsonObject(with: data) as? [String: String]
+    else { return [("cn", "CN - China"), ("us", "US - United States"), ("jp", "JP - Japan")] }
+    return dict.map { (code: $0.key.lowercased(), name: "\($0.key) - \($0.value)") }
+        .sorted { $0.name.localizedCompare($1.name) == .orderedAscending }
+}()
 private let languages: [(code: String, label: String)] = {
     var list = Bundle.main.localizations
         .filter { $0 != "Base" }
@@ -203,12 +210,12 @@ struct SettingsView: View {
 
                     SettingsRow("Storefront") {
                         Picker("", selection: $storefront) {
-                            ForEach(storefronts, id: \.self) { code in
-                                Text(code.uppercased()).tag(code)
+                            ForEach(storefronts, id: \.code) { sf in
+                                Text(sf.name).tag(sf.code)
                             }
                         }
                         .labelsHidden()
-                        .frame(width: 90)
+                        .frame(width: 280)
                         .onChange(of: storefront) { _, val in
                             AppSettings.shared.storefront = val
                         }
@@ -269,21 +276,6 @@ struct SettingsView: View {
                     }
                     .padding(16)
 
-                }
-                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10))
-            }
-
-            // MARK: Desktop Lyrics (placeholder)
-            VStack(alignment: .leading, spacing: 10) {
-                SectionHeader(title: "Desktop Lyrics", icon: "menubar.dock.rectangle")
-
-                VStack(spacing: 0) {
-                    HStack {
-                        Text("Coming Soon")
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                    }
-                    .padding(16)
                 }
                 .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10))
             }

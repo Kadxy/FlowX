@@ -234,6 +234,7 @@
       }
     },
     "Coming Soon" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -292,6 +293,7 @@
       }
     },
     "Desktop Lyrics" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {

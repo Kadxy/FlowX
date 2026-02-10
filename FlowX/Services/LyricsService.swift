@@ -26,7 +26,7 @@ final class LyricsService {
             return nil
         }
 
-        // 1. Disk cache: {catalogId}.ttml
+        // Check disk cache
         if let ttml = loadCachedTTML(catalogId: catalogId) {
             logger.debug("Disk cache hit: \(trackName) (\(catalogId))")
             let lines = TTMLParser.parse(ttml)
@@ -35,13 +35,13 @@ final class LyricsService {
 
         logger.debug("Fetching TTML lyrics: \(trackName) - \(artistName) (\(catalogId))")
 
-        // 2. Fetch TTML lyrics
+        // Fetch TTML lyrics from API
         guard let ttml = await fetchSyllableLyrics(songId: catalogId) else {
             logger.info("No lyrics for songId \(catalogId)")
             return nil
         }
 
-        // 3. Save TTML to disk
+        // Save to disk cache
         saveTTMLToDisk(ttml: ttml, catalogId: catalogId)
 
         let lines = TTMLParser.parse(ttml)
@@ -49,7 +49,7 @@ final class LyricsService {
         return lines.isEmpty ? nil : lines
     }
 
-    // MARK: - Fetch syllable lyrics
+    // MARK: - Syllable Lyrics
 
     private func fetchSyllableLyrics(songId: String) async -> String? {
         var c = URLComponents(string: "https://amp-api.music.apple.com/v1/catalog/\(settings.storefront)/songs/\(songId)/syllable-lyrics")
@@ -82,7 +82,7 @@ final class LyricsService {
         }
     }
 
-    // MARK: - Disk Cache (filename: {catalogId}.ttml)
+    // MARK: - Disk Cache
 
     func cachedFileURL(catalogId: String) -> URL? {
         let file = Self.cacheDir.appendingPathComponent("\(catalogId).ttml")

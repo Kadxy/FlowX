@@ -24,14 +24,14 @@ final class MusicController: ObservableObject {
     private var lastWasInterlude: Bool = false
     private var currentCatalogId: String = ""
 
-    /// Called on main thread after each position poll
+    /// Called on the main thread after each position poll.
     var onPositionUpdated: (() -> Void)?
 
     private init() {
         let app: AnyObject = SBApplication(bundleIdentifier: "com.apple.Music")!
         musicApp = unsafeBitCast(app, to: MusicApplication.self)
 
-        // Instant state/track changes via notification
+        // Instant state/track changes via distributed notification
         DistributedNotificationCenter.default().addObserver(
             self,
             selector: #selector(onPlayerInfoChanged(_:)),
@@ -56,12 +56,11 @@ final class MusicController: ObservableObject {
         refreshState()
     }
 
-    // MARK: - Notification handler (instant response to play/pause/track change)
+    // MARK: - Notification Handler
 
     @objc private func onPlayerInfoChanged(_ notification: Notification) {
         let info = notification.userInfo
 
-        // Player state
         if let stateStr = info?["Player State"] as? String {
             let newState: PlayerState
             switch stateStr {
@@ -71,7 +70,7 @@ final class MusicController: ObservableObject {
             default:        newState = .unknown
             }
             if newState != playerState {
-                // Sync position immediately on resume so animation rebuilds with accurate elapsed
+                // Sync position immediately on resume so animation rebuilds with accurate elapsed time
                 if newState == .playing {
                     playerPosition = musicApp.playerPosition
                     updateCurrentLyric()
@@ -81,7 +80,7 @@ final class MusicController: ObservableObject {
             isMusicRunning = true
         }
 
-        // Track info from notification (no SB IPC)
+        // Track info from notification (avoids ScriptingBridge IPC)
         let name = info?["Name"] as? String ?? ""
         let artist = info?["Artist"] as? String ?? ""
         let album = info?["Album"] as? String ?? ""
@@ -111,7 +110,7 @@ final class MusicController: ObservableObject {
         }
     }
 
-    // MARK: - Music.app quit detection
+    // MARK: - Music.app Quit Detection
 
     @objc private func onAppTerminated(_ notification: Notification) {
         guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
@@ -129,7 +128,7 @@ final class MusicController: ObservableObject {
         currentCatalogId = ""
     }
 
-    // MARK: - Position polling (active whenever Music.app is running)
+    // MARK: - Position Polling
 
     private func pollPosition() {
         guard isMusicRunning,
@@ -140,7 +139,7 @@ final class MusicController: ObservableObject {
         onPositionUpdated?()
     }
 
-    // MARK: - Full state refresh (on launch only)
+    // MARK: - State Refresh
 
     private func refreshState() {
         guard musicApp.isRunning else { return }
@@ -164,7 +163,7 @@ final class MusicController: ObservableObject {
         }
     }
 
-    // MARK: - Track change → fetch lyrics
+    // MARK: - Track Change
 
     private func onTrackChanged() {
         let identity = currentTrack.identity
@@ -193,14 +192,13 @@ final class MusicController: ObservableObject {
                 self.currentCatalogId = adamId
                 if let lines, !lines.isEmpty {
                     self.lyrics = lines
-                    // Only treat as synced lyrics if they have timing info
                     self.hasLyrics = lines.contains { $0.time > 0 }
                 }
             }
         }
     }
 
-    // MARK: - Lyric sync
+    // MARK: - Lyric Sync
 
     private static let interludeThreshold: TimeInterval = 5.0
 
@@ -232,7 +230,7 @@ final class MusicController: ObservableObject {
             if line.time <= pos { activeIdx = i } else { break }
         }
 
-        // Detect interlude: past current line's endTime with a significant gap before the next line
+        // Detect interlude: past current line's endTime with a large gap before the next line
         var isInterlude = false
         if activeIdx >= 0, lyrics[activeIdx].endTime > 0, pos > lyrics[activeIdx].endTime {
             let nextStart = activeIdx + 1 < lyrics.count ? lyrics[activeIdx + 1].time : .infinity
@@ -248,7 +246,7 @@ final class MusicController: ObservableObject {
             currentLine = nil
             currentLineIndex = -1
         } else if isInterlude {
-            // Build a synthetic LyricLine so karaoke animation works on the symbols
+            // Build a synthetic interlude LyricLine for karaoke animation
             let start = lyrics[activeIdx].endTime
             let end = activeIdx + 1 < lyrics.count ? lyrics[activeIdx + 1].time : start + 5
             let line = Self.makeInterludeLine(start: start, end: end)
@@ -283,7 +281,7 @@ final class MusicController: ObservableObject {
         musicApp.activate()
     }
 
-    // MARK: - Lyrics management (menu actions)
+    // MARK: - Lyrics Management
 
     func cachedLyricsFileURL() -> URL? {
         guard !currentCatalogId.isEmpty else { return nil }

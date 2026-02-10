@@ -3,9 +3,11 @@ import os
 
 private let logger = Logger(subsystem: "com.kadxy.FlowX", category: "NowPlaying")
 
-/// 通过 osascript + MRNowPlayingRequest 获取当前播放曲目的 Adam ID
-/// macOS 15.4+ mediaremoted 限制了直接调用 MRMediaRemoteGetNowPlayingInfo，
-/// 但 /usr/bin/osascript 作为系统二进制可以加载私有框架并访问 MRNowPlayingRequest
+/// Retrieves the Adam ID of the currently playing track via osascript + MRNowPlayingRequest.
+///
+/// On macOS 15.4+, `mediaremoted` restricts direct calls to `MRMediaRemoteGetNowPlayingInfo`.
+/// However, `/usr/bin/osascript` (a system binary) can load the private framework and access
+/// `MRNowPlayingRequest` without the restricted entitlement.
 enum NowPlayingService {
 
     private static let script = """
@@ -32,7 +34,7 @@ enum NowPlayingService {
         return (storeId as real) as text
         """
 
-    /// 获取当前播放曲目的 Adam ID (catalog song ID)
+    /// Returns the Adam ID (catalog song ID) of the currently playing track.
     static func getNowPlayingAdamID() async -> String? {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
@@ -42,7 +44,7 @@ enum NowPlayingService {
 
                 let pipe = Pipe()
                 process.standardOutput = pipe
-                process.standardError = Pipe() // suppress stderr
+                process.standardError = Pipe()
 
                 do {
                     try process.run()

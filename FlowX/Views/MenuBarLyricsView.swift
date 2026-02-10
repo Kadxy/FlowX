@@ -79,12 +79,11 @@ final class MenuBarLyricsView: NSView {
         updateTrackingArea()
     }
 
-    // MARK: - Core dispatch
+    // MARK: - Drift Detection
 
-    /// 漂移检测阈值（秒）
     private let driftThreshold: TimeInterval = 0.5
 
-    /// 每次轮询调用，检测动画与实际播放位置的偏差，超过阈值则重建动画。
+    /// Called on each poll. Detects animation drift from actual playback position and rebuilds if needed.
     func syncIfNeeded() {
         guard animationLayer.isAnimating, !isHovering else { return }
         let now = CACurrentMediaTime()

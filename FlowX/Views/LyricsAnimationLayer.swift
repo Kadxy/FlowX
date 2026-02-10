@@ -9,11 +9,11 @@ final class LyricsAnimationLayer: CALayer {
 
     var renderAppearance: NSAppearance?
 
-    // MARK: - 只读状态
+    // MARK: - State
 
     private(set) var isAnimating: Bool = false
 
-    // MARK: - 内部子 layer
+    // MARK: - Sublayers
 
     private var textImageLayer: CALayer?
     private var dimImageLayer: CALayer?
@@ -21,32 +21,27 @@ final class LyricsAnimationLayer: CALayer {
     private var karaokeMask: CALayer?
     private var edgeFadeMask: CAGradientLayer?
 
-    // MARK: - 文本缓存
+    // MARK: - Text cache
 
     private var cachedText: String = ""
     private var cachedTextSize: NSSize = .zero
     private var cachedWordWidths: [CGFloat] = []
 
-    // MARK: - 漂移检测锚点
+    // MARK: - Drift detection anchors
 
-    /// 动画构建时的播放位置（秒）
+    /// Playback position (seconds) when the animation was built.
     private(set) var anchorPosition: TimeInterval = 0
-    /// 动画构建时的系统时间（CACurrentMediaTime）
+    /// System time (`CACurrentMediaTime()`) when the animation was built.
     private(set) var anchorWallTime: CFTimeInterval = 0
 
-    // MARK: - 常量
+    // MARK: - Constants
 
     private let font: NSFont = .systemFont(ofSize: 14)
     private let scale: CGFloat = 2.0
 
-    // MARK: - 公共 API
+    // MARK: - Public API
 
-    /// 构建或重建动画。安全地重复调用——每次都会先拆掉旧 layer。
-    /// - Parameters:
-    ///   - text: 显示文本（歌词行或 "♪ Not Playing" 等静态文本）
-    ///   - line: 歌词行（含 word timing），为 nil 时绘制静态文本
-    ///   - position: 当前播放位置（秒）
-    ///   - playing: 当前是否正在播放
+    /// Builds or rebuilds the animation. Safe to call repeatedly — tears down old layers each time.
     func update(text: String, line: LyricLine?, position: TimeInterval, playing: Bool) {
         if text != cachedText {
             cachedText = text
@@ -69,8 +64,7 @@ final class LyricsAnimationLayer: CALayer {
         }
     }
 
-    /// 冻结所有动画在当前视觉位置（暂停时调用）。
-    /// 原理：将每个子 layer 的 speed 设为 0，CA 的内部时钟停止，画面定格。
+    /// Freezes all animations at their current visual position (called on pause).
     func freeze() {
         let now = CACurrentMediaTime()
         for sub in allAnimatedLayers {
@@ -81,10 +75,7 @@ final class LyricsAnimationLayer: CALayer {
         }
     }
 
-    /// 从冻结位置恢复动画（播放时调用）。
-    /// 原理：恢复 speed=1，并调整 beginTime 补偿暂停期间流逝的时间，
-    /// 使动画从暂停的那一帧继续而不是跳到当前时刻。
-    /// 这是 Apple 官方推荐的 CA 动画暂停/恢复做法。
+    /// Resumes animations from the frozen position (called on play).
     func unfreeze() {
         let now = CACurrentMediaTime()
         for sub in allAnimatedLayers {
@@ -98,7 +89,7 @@ final class LyricsAnimationLayer: CALayer {
         }
     }
 
-    // MARK: - 动画构建
+    // MARK: - Animation Construction
 
     private func buildAnimations(line: LyricLine, position: TimeInterval) {
         let size = cachedTextSize
@@ -111,7 +102,7 @@ final class LyricsAnimationLayer: CALayer {
         let y = (bounds.height - size.height) / 2
         let origin = CGPoint(x: needsScroll ? 0 : (bounds.width - size.width) / 2, y: y)
 
-        // 1. 构建内容层（卡拉OK 双层 或 普通单层）
+        // Build content layers (karaoke dual-layer or plain single-layer)
         if karaoke {
             buildKaraokeLayers(line: line, size: size, origin: origin,
                                duration: duration, elapsed: elapsed)
@@ -119,7 +110,7 @@ final class LyricsAnimationLayer: CALayer {
             textImageLayer = addImageLayer(renderTextImage(), size: size, origin: origin)
         }
 
-        // 2. 文本溢出时添加滚动动画和边缘渐隐
+        // Add scroll animation and edge fade when text overflows
         if needsScroll {
             let times = computeScrollTimes(karaoke: karaoke, line: line,
                                            textWidth: size.width, duration: duration)
@@ -139,7 +130,7 @@ final class LyricsAnimationLayer: CALayer {
         }
     }
 
-    /// 无动画时的静态文本（如 "♪ Not Playing" 或无时间信息的歌词）
+    /// Static text layer for non-animated content.
     private func buildStaticLayer() {
         let size = cachedTextSize
         guard size.width > 0, size.height > 0 else { return }
@@ -148,23 +139,23 @@ final class LyricsAnimationLayer: CALayer {
         textImageLayer = addImageLayer(renderTextImage(), size: size, origin: CGPoint(x: x, y: y))
     }
 
-    // MARK: - 卡拉OK 层构建
+    // MARK: - Karaoke Layers
 
     private func buildKaraokeLayers(
         line: LyricLine, size: NSSize, origin: CGPoint,
         duration: TimeInterval, elapsed: TimeInterval
     ) {
-        // 缓存每个单词的宽度，按比例修正字距（单词宽度之和 ≠ 整行宽度）
+        // Cache per-word widths, scaled proportionally to correct for kerning
         let attrs: [NSAttributedString.Key: Any] = [.font: font]
         let rawWidths = line.words.map { (($0.text) as NSString).size(withAttributes: attrs).width }
         let rawSum = rawWidths.reduce(0, +)
         let ratio = rawSum > 0 ? size.width / rawSum : 1.0
         cachedWordWidths = rawWidths.map { $0 * ratio }
 
-        // 暗色底层（未唱部分，alpha 0.45）
+        // Dim layer (unsung portion, alpha 0.45)
         dimImageLayer = addImageLayer(renderTextImage(dimAlpha: 0.45), size: size, origin: origin)
 
-        // 高亮层 + 遮罩（已唱部分，遮罩宽度从 0 逐字扩展）
+        // Bright layer + mask (sung portion, mask width expands word-by-word)
         let brightLayer = addImageLayer(renderTextImage(), size: size, origin: origin)
         let kMask = CALayer()
         kMask.backgroundColor = NSColor.white.cgColor
@@ -178,9 +169,9 @@ final class LyricsAnimationLayer: CALayer {
         addKaraokeAnimation(line: line, duration: duration, elapsed: elapsed)
     }
 
-    // MARK: - 滚动动画
+    // MARK: - Scroll Animation
 
-    /// 计算滚动的开始/结束时间点（占歌词行时长的比例）
+    /// Computes scroll start/end times as a fraction of the lyric line duration.
     private func computeScrollTimes(
         karaoke: Bool, line: LyricLine?, textWidth: CGFloat, duration: TimeInterval
     ) -> (start: Double, end: Double) {
@@ -203,7 +194,7 @@ final class LyricsAnimationLayer: CALayer {
         }
     }
 
-    /// 非卡拉OK 模式的滚动：文本唱到 65% 位置时开始平滑滚动
+    /// Non-karaoke scroll: starts scrolling when text reaches the 65% position.
     private func makeScrollAnimation(
         textWidth: CGFloat, duration: TimeInterval, elapsed: TimeInterval
     ) -> CAKeyframeAnimation {
@@ -214,7 +205,7 @@ final class LyricsAnimationLayer: CALayer {
                                    startT: startRatio, endT: endRatio)
     }
 
-    /// 卡拉OK 模式的滚动：高亮边缘保持在视图 65% 位置
+    /// Karaoke scroll: keeps the highlight edge at the 65% position of the view.
     private func makeHighlightFollowScroll(
         line: LyricLine, textWidth: CGFloat, duration: TimeInterval, elapsed: TimeInterval
     ) -> CAKeyframeAnimation {
@@ -234,7 +225,7 @@ final class LyricsAnimationLayer: CALayer {
                                    startT: scrollStartT, endT: scrollEndT)
     }
 
-    /// 滚动关键帧：[停留, 停留, 滚到底, 停留]，中间段用 easeInEaseOut
+    /// Scroll keyframes: [hold, hold, scroll-to-end, hold] with easeInEaseOut for the middle segment.
     private func makeScrollKeyframes(
         textWidth: CGFloat, duration: TimeInterval, elapsed: TimeInterval, startT: Double, endT: Double
     ) -> CAKeyframeAnimation {
@@ -255,10 +246,10 @@ final class LyricsAnimationLayer: CALayer {
         return anim
     }
 
-    // MARK: - 卡拉OK 遮罩动画
+    // MARK: - Karaoke Mask Animation
 
-    /// 构建遮罩宽度的关键帧动画：每个单词的 begin/end 对应一个宽度值，
-    /// 遮罩从左往右逐字扩展，产生逐字高亮效果。
+    /// Builds a mask-width keyframe animation: each word's begin/end maps to a width value,
+    /// expanding the mask left-to-right to produce a word-by-word highlight effect.
     private func addKaraokeAnimation(line: LyricLine, duration: TimeInterval, elapsed: TimeInterval) {
         guard let mask = karaokeMask, !line.words.isEmpty else { return }
 
@@ -290,10 +281,10 @@ final class LyricsAnimationLayer: CALayer {
         mask.add(anim, forKey: "karaoke")
     }
 
-    // MARK: - 边缘渐隐
+    // MARK: - Edge Fade
 
-    /// 滚动时的左右边缘渐隐效果，用 CAGradientLayer 作为 self.mask。
-    /// locations 随滚动阶段变化：无左渐隐 → 两边渐隐 → 无右渐隐。
+    /// Applies edge fade during scrolling via a `CAGradientLayer` mask on `self`.
+    /// The fade locations animate through three phases: no-left-fade -> both-fades -> no-right-fade.
     private func buildEdgeFade(scrollStart: Double, scrollEnd: Double,
                                duration: TimeInterval, elapsed: TimeInterval) {
         let fade = CAGradientLayer()
@@ -331,10 +322,10 @@ final class LyricsAnimationLayer: CALayer {
         edgeFadeMask = fade
     }
 
-    // MARK: - 文本渲染
+    // MARK: - Text Rendering
 
-    /// 将文本光栅化为位图（CGImage）。
-    /// 因为是离屏渲染，macOS 不会自动设置外观上下文，必须用 renderAppearance 手动指定。
+    /// Rasterizes text into a bitmap (`CGImage`).
+    /// Off-screen rendering requires manually setting the appearance context via `renderAppearance`.
     private func renderTextImage(dimAlpha: CGFloat? = nil) -> CGImage? {
         let size = cachedTextSize
         let pw = Int(ceil(size.width * scale)), ph = Int(ceil(size.height * scale))
@@ -362,9 +353,8 @@ final class LyricsAnimationLayer: CALayer {
         return ctx.makeImage()
     }
 
-    // MARK: - 工具方法
+    // MARK: - Helpers
 
-    /// 创建并添加一个显示 CGImage 的子 layer，返回引用
     @discardableResult
     private func addImageLayer(_ image: CGImage?, size: NSSize, origin: CGPoint) -> CALayer {
         let l = CALayer()
@@ -376,12 +366,12 @@ final class LyricsAnimationLayer: CALayer {
         return l
     }
 
-    /// 所有需要 freeze/unfreeze 的子 layer
+    /// All sublayers that need freeze/unfreeze.
     private var allAnimatedLayers: [CALayer] {
         [textImageLayer, dimImageLayer, brightImageLayer, karaokeMask, edgeFadeMask].compactMap { $0 }
     }
 
-    /// 拆除所有子 layer，重置状态。用 CATransaction 禁用隐式动画避免副作用。
+    /// Tears down all sublayers and resets state.
     private func teardownSublayers() {
         CATransaction.begin()
         CATransaction.setDisableActions(true)

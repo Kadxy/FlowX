@@ -15,7 +15,7 @@ struct TTMLParser {
         return parsePlainBody(ttml)
     }
 
-    // MARK: - Parse zh-Hans translation section
+    // MARK: - Translation Section
 
     private static func parseTranslation(_ ttml: String, lang: String, wordTiming: Bool) -> [LyricLine]? {
         let translationPattern = #"<translation[^>]*xml:lang="\#(lang)"[^>]*>(.*?)</translation>"#
@@ -41,7 +41,7 @@ struct TTMLParser {
 
             let lineTime = spans.first!.begin
             let lineEnd = spans.last!.end
-            // For display: strip tags but keep x-bg content (background vocals in parentheses)
+            // Strip tags but keep x-bg content (background vocals in parentheses)
             let lineText = stripTags(content).trimmingCharacters(in: .whitespacesAndNewlines)
             guard !lineText.isEmpty else { continue }
 
@@ -57,7 +57,7 @@ struct TTMLParser {
         return result.isEmpty ? nil : result.sorted { $0.time < $1.time }
     }
 
-    // MARK: - Parse main <body> <p> elements (fallback)
+    // MARK: - Body Parsing
 
     private static func parseBody(_ ttml: String, wordTiming: Bool) -> [LyricLine] {
         let pattern = #"<p\s+begin="([^"]+)"\s+end="([^"]+)"[^>]*>(.*?)</p>"#
@@ -75,7 +75,7 @@ struct TTMLParser {
             let rawContent = String(ttml[contentRange])
 
             let spans = wordTiming ? extractSpans(from: rawContent) : []
-            // For display text: strip tags but keep x-bg content (background vocals in parentheses)
+            // Strip tags but keep x-bg content (background vocals in parentheses)
             let text = stripTags(rawContent).trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { continue }
 
@@ -91,18 +91,17 @@ struct TTMLParser {
         return result.sorted { $0.time < $1.time }
     }
 
-    // MARK: - Extract spans with timing
+    // MARK: - Span Extraction
 
     private static func extractSpans(from content: String) -> [LyricWord] {
-        // Strip x-bg (background vocal) blocks before extracting spans,
-        // since their inner <span> tags also have begin/end and would pollute the word list
+        // Strip x-bg (background vocal) blocks before extracting spans
         let stripped = content.replacingOccurrences(
             of: #"<span\s+ttm:role="x-bg"[^>]*>.*?</span>"#,
             with: "",
             options: .regularExpression
         )
 
-        // Capture span text + any trailing text before the next tag (e.g. spaces between spans)
+        // Capture span text + any trailing text before the next tag (e.g., spaces)
         let spanPattern = #"<span\s+begin="([^"]+)"\s+end="([^"]+)"[^>]*>([^<]*)</span>([^<]*)"#
         guard let regex = try? NSRegularExpression(pattern: spanPattern, options: []) else { return [] }
         let matches = regex.matches(in: stripped, range: NSRange(stripped.startIndex..., in: stripped))
@@ -114,7 +113,7 @@ struct TTMLParser {
                   let textRange = Range(match.range(at: 3), in: stripped) else { continue }
 
             var text = String(stripped[textRange])
-            // Append trailing inter-span text (spaces, etc.)
+            // Append trailing inter-span text (spaces)
             if let trailingRange = Range(match.range(at: 4), in: stripped) {
                 text += String(stripped[trailingRange])
             }
@@ -130,7 +129,7 @@ struct TTMLParser {
         return result
     }
 
-    // MARK: - Parse plain lyrics (timing="None", no begin/end on <p>)
+    // MARK: - Plain Lyrics
 
     private static func parsePlainBody(_ ttml: String) -> [LyricLine] {
         let pattern = #"<p>([^<]+)</p>"#
@@ -155,7 +154,7 @@ struct TTMLParser {
         return result
     }
 
-    // MARK: - Time parsing: "30.208" or "1:13.808" or "00:01:13.808"
+    // MARK: - Time Parsing
 
     static func parseTime(_ str: String) -> TimeInterval {
         let parts = str.components(separatedBy: ":")

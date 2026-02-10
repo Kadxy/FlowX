@@ -27,7 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Logo item — native NSStatusBarButton, created first so it sits on the right
+        // Logo item, created first so it sits on the right
         logoItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
         let img = NSImage(systemSymbolName: "music.pages.fill", accessibilityDescription: "FlowX")?
@@ -38,7 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         logoItem.button?.action = #selector(logoClicked)
         logoItem.button?.sendAction(on: [.leftMouseUp])
 
-        // Lyrics item — display only, created second so it appears to the left
+        // Lyrics item, created second so it appears to the left
         let w = menuBarLyricsWidth
         lyricsItem = NSStatusBar.system.statusItem(withLength: w)
         lyricsItem.button?.sendAction(on: [])
@@ -78,10 +78,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func logoClicked() {
         guard let button = logoItem.button else { return }
-        let m = menu // trigger lazy init before updating items
+        let m = menu
         updateLyricsMenuItems()
         m.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 5), in: button)
-        // Refresh after menu closes (RunLoop was blocked during tracking)
         updateMenuBar()
     }
 
@@ -101,18 +100,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBarLyricsItem.image = NSImage(systemSymbolName: "menubar.rectangle", accessibilityDescription: nil)
         menuBarLyricsItem.state = AppSettings.shared.showMenuBarLyrics ? .on : .off
         menu.addItem(menuBarLyricsItem)
-
-        // WIP: Desktop Lyrics
-        // let desktopLyricsItem = NSMenuItem(title: String(localized: "Desktop Lyrics"), action: nil, keyEquivalent: "")
-        // desktopLyricsItem.image = NSImage(systemSymbolName: "menubar.dock.rectangle", accessibilityDescription: nil)
-        // desktopLyricsItem.isEnabled = false
-        // menu.addItem(desktopLyricsItem)
-
-        // WIP: Notch Player
-        // let notchPlayerItem = NSMenuItem(title: String(localized: "Notch Player"), action: nil, keyEquivalent: "")
-        // notchPlayerItem.image = NSImage(systemSymbolName: "rectangle.inset.filled", accessibilityDescription: nil)
-        // notchPlayerItem.isEnabled = false
-        // menu.addItem(notchPlayerItem)
 
         menu.addItem(NSMenuItem.separator())
 
