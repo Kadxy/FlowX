@@ -27,9 +27,13 @@ A minimalist macOS menu bar lyrics viewer for **Apple Music**, featuring real-ti
 
 ## Installation
 
-Download the latest `FlowX-vX.X.X.zip` from [Releases](https://github.com/kadxy/FlowX/releases), unzip, and drag `FlowX.app` to `/Applications`.
+Download the latest `FlowX-vX.X.X.dmg` from [Releases](https://github.com/kadxy/FlowX/releases), open it, and drag `FlowX.app` to `Applications`.
 
-> Since the app is not notarized, on first launch right-click → **Open**, then confirm in the dialog.
+> The app is not notarized. After downloading, run the following command to remove the quarantine attribute:
+>
+> ```bash
+> xattr -cr /Applications/FlowX.app
+> ```
 
 ## Configuration
 
