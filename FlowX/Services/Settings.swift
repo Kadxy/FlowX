@@ -38,7 +38,7 @@ final class AppSettings: ObservableObject {
     @Published var menuBarLyricsWidth: Double = 180
     @Published var showMenuBarLyrics: Bool = true
     @Published var menuBarKaraoke: Bool = true
-    @Published var menuBarEdgeFadeWidth: Double = 24
+    @Published var menuBarEdgeFadeWidth: Double = 36
     @Published var language: String = "system"
 
     private var cancellables = Set<AnyCancellable>()
@@ -63,7 +63,7 @@ final class AppSettings: ObservableObject {
         menuBarLyricsWidth = json["menuBarLyricsWidth"] as? Double ?? 180
         showMenuBarLyrics = json["showMenuBarLyrics"] as? Bool ?? true
         menuBarKaraoke = json["menuBarKaraoke"] as? Bool ?? true
-        menuBarEdgeFadeWidth = min(40, max(0, json["menuBarEdgeFadeWidth"] as? Double ?? 24))
+        menuBarEdgeFadeWidth = min(60, max(0, json["menuBarEdgeFadeWidth"] as? Double ?? 36))
         language = json["language"] as? String ?? "system"
     }
 

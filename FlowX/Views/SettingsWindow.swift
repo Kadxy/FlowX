@@ -220,7 +220,7 @@ struct SettingsView: View {
 
                     SettingsRow("Edge Fade") {
                         HStack(spacing: 10) {
-                            Slider(value: $settings.menuBarEdgeFadeWidth, in: 0...40, step: 2)
+                            Slider(value: $settings.menuBarEdgeFadeWidth, in: 0...60, step: 6)
                                 .frame(width: 120)
                             Text("\(Int(settings.menuBarEdgeFadeWidth)) pt")
                                 .font(.system(.body, design: .monospaced))

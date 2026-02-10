@@ -5,7 +5,7 @@ final class LyricsAnimationLayer: CALayer {
 
     var karaokeEnabled: Bool = true
 
-    var edgeFadeWidth: CGFloat = 24
+    var edgeFadeWidth: CGFloat = 36
 
     var renderAppearance: NSAppearance?
 
@@ -316,7 +316,7 @@ final class LyricsAnimationLayer: CALayer {
     // MARK: - Edge Fade
 
     /// Applies edge fade during scrolling via a `CAGradientLayer` mask on `self`.
-    /// The fade locations animate through three phases: no-left-fade -> both-fades -> no-right-fade.
+    /// Locations are fixed; colors animate to avoid the hard-edge artifact of growing gradient width.
     private func buildEdgeFade(scrollStart: Double, scrollEnd: Double,
                                duration: TimeInterval, elapsed: TimeInterval) {
         let fade = CAGradientLayer()
@@ -325,22 +325,30 @@ final class LyricsAnimationLayer: CALayer {
         fade.endPoint = CGPoint(x: 1, y: 0.5)
 
         let inset = Double(edgeFadeWidth / bounds.width)
-        fade.colors = [NSColor.clear, .black, .black, .clear].map(\.cgColor)
-        fade.locations = [0, 0, NSNumber(value: 1 - inset), 1]
+        let edge = NSColor.clear.cgColor
+        let solid = NSColor.black.cgColor
 
-        let noLeft: [NSNumber] = [0, 0, NSNumber(value: 1 - inset), 1]
-        let both: [NSNumber] = [0, NSNumber(value: inset), NSNumber(value: 1 - inset), 1]
-        let noRight: [NSNumber] = [0, NSNumber(value: inset), 1, 1]
+        // Fixed locations — gradient shape never changes
+        fade.locations = [0, NSNumber(value: inset), NSNumber(value: 1 - inset), 1]
+        fade.colors = [solid, solid, solid, edge]
 
-        let tr = min(0.3 / duration, (scrollEnd - scrollStart) / 3)
+        // Color states: solid = fully visible, edge = faded
+        let noLeft  = [solid, solid, solid, edge]
+        let both    = [edge,  solid, solid, edge]
+        let noRight = [edge,  solid, solid, solid]
 
-        let anim = CAKeyframeAnimation(keyPath: "locations")
+        let desiredTr = 0.75 / duration
+        let ahead = 0.15 / duration
+        let leftTr = min(desiredTr, scrollStart + ahead)
+        let rightTr = min(desiredTr, 1 - scrollEnd + ahead)
+
+        let anim = CAKeyframeAnimation(keyPath: "colors")
         anim.values = [noLeft, noLeft, both, both, noRight, noRight]
         anim.keyTimes = [0,
-                         NSNumber(value: scrollStart),
-                         NSNumber(value: scrollStart + tr),
-                         NSNumber(value: scrollEnd - tr),
-                         NSNumber(value: scrollEnd),
+                         NSNumber(value: max(0, scrollStart - leftTr)),
+                         NSNumber(value: max(0, scrollStart - ahead)),
+                         NSNumber(value: min(1, scrollEnd - ahead)),
+                         NSNumber(value: min(1, scrollEnd + rightTr - ahead)),
                          1]
         anim.duration = duration
         anim.calculationMode = .linear
