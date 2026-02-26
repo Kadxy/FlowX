@@ -5,6 +5,8 @@ import AppKit
 
 final class MusicController: ObservableObject {
     static let shared = MusicController()
+    private static let positionPollInterval: TimeInterval = 0.12
+    private static let lineSwitchLeadTime: TimeInterval = 0.12
 
     @Published private(set) var playerState: PlayerState = .stopped
     @Published private(set) var currentTrack: TrackInfo = .empty
@@ -50,7 +52,7 @@ final class MusicController: ObservableObject {
         )
 
         // Lightweight position poll for lyric sync (only does work when playing)
-        let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: Self.positionPollInterval, repeats: true) { [weak self] _ in
             self?.pollPosition()
         }
         RunLoop.main.add(timer, forMode: .common)
@@ -196,6 +198,9 @@ final class MusicController: ObservableObject {
                 if let lines, !lines.isEmpty {
                     self.lyrics = lines
                     self.hasLyrics = lines.contains { $0.time > 0 }
+                    self.playerPosition = self.musicApp.playerPosition
+                    self.updateCurrentLyric()
+                    self.onPositionUpdated?()
                 }
             }
         }
@@ -226,10 +231,13 @@ final class MusicController: ObservableObject {
     private func updateCurrentLyric() {
         guard !lyrics.isEmpty else { return }
         let pos = playerPosition
+        let displayPosition = playerState.isPlaying
+            ? pos + Self.lineSwitchLeadTime
+            : pos
 
         var activeIdx = -1
         for (i, line) in lyrics.enumerated() {
-            if line.time <= pos { activeIdx = i } else { break }
+            if line.time <= displayPosition { activeIdx = i } else { break }
         }
 
         // Detect intro: before the first lyric, gap >= threshold, and title shown for >= 3s
