@@ -12,8 +12,7 @@ struct FlowXApp: App {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var logoItem: NSStatusItem!
-    private var lyricsItem: NSStatusItem!
+    private var statusItem: NSStatusItem!
     private var lyricsView: MenuBarLyricsView!
     private lazy var mc = MusicController.shared
     private var cancellables = Set<AnyCancellable>()
@@ -37,27 +36,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let settings = AppSettings.shared
 
-        // Logo item, created first so it sits on the right
-        logoItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
-        let img = NSImage(systemSymbolName: "music.pages.fill", accessibilityDescription: "FlowX")?
-            .withSymbolConfiguration(config)
-        img?.isTemplate = true
-        logoItem.button?.image = img
-        logoItem.button?.target = self
-        logoItem.button?.action = #selector(logoClicked)
-        logoItem.button?.sendAction(on: [.leftMouseUp])
+        // A single status item carries the lyrics, the hover controls and the menu entry. Keeping
+        // them in separate items is what let clicks land on the wrong element on macOS 27.
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        statusItem.button?.sendAction(on: [])
 
-        // Lyrics item, created second so it appears to the left
-        let w = CGFloat(settings.menuBarLyricsWidth)
-        lyricsItem = NSStatusBar.system.statusItem(withLength: w)
-        lyricsItem.button?.sendAction(on: [])
-
-        lyricsView = MenuBarLyricsView(frame: NSRect(x: 0, y: 0, width: w, height: 22))
+        lyricsView = MenuBarLyricsView(frame: NSRect(x: 0, y: 0, width: 100, height: 22))
+        lyricsView.onMenu = { [weak self] in self?.showMenu() }
         lyricsView.onPrev = { [weak self] in self?.mc.backTrack() }
         lyricsView.onPlayPause = { [weak self] in self?.mc.playPause() }
         lyricsView.onNext = { [weak self] in self?.mc.nextTrack() }
-        lyricsItem.button?.addSubview(lyricsView)
+        statusItem.button?.addSubview(lyricsView)
 
         mc.onPositionUpdated = { [weak self] in self?.lyricsView.syncIfNeeded() }
 
@@ -68,11 +57,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings.$menuBarLyricsWidth
             .dropFirst()
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] newWidth in
+            .sink { [weak self] _ in self?.layoutStatusItem() }
+            .store(in: &cancellables)
+
+        settings.$showMenuBarLyrics
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] isVisible in
                 guard let self else { return }
-                let w = CGFloat(newWidth)
-                self.lyricsItem.length = w
-                self.lyricsView.frame = NSRect(x: 0, y: 0, width: w, height: 22)
+                self.applyMenuBarVisibility()
+                self.menuBarLyricsItem.state = isVisible ? .on : .off
+                if isVisible {
+                    self.mc.fetchLyricsIfNeeded()
+                    self.updateMenuBar()
+                }
             }
             .store(in: &cancellables)
 
@@ -100,12 +98,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .sink { [weak self] _ in self?.updateMenuBar() }.store(in: &cancellables)
     }
 
-    @objc private func logoClicked() {
-        guard let button = logoItem.button else { return }
+    /// Gap between the menu bar's bottom edge and the menu.
+    private static let menuGap: CGFloat = 2
+
+    private func showMenu() {
+        guard let button = statusItem.button else { return }
+        // Touch `menu` first: it is lazy, and makeMenu() is what populates the item references.
         let m = menu
         updateLyricsMenuItems()
-        m.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 5), in: button)
+        m.popUp(positioning: nil, at: menuOrigin(in: button), in: button)
         updateMenuBar()
+    }
+
+    /// Top-left corner for the menu, in the button's coordinates: the item's left edge, just
+    /// below the menu bar. A fixed offset from the button is not enough — the bar's height
+    /// varies by display and system version, and a menu that starts even half a point inside
+    /// the bar is clipped into a scrolling menu.
+    private func menuOrigin(in button: NSStatusBarButton) -> NSPoint {
+        let fallback = NSPoint(x: 0, y: button.bounds.height + 5)
+        guard let window = button.window, let screen = window.screen ?? NSScreen.main else { return fallback }
+
+        let itemFrame = window.convertToScreen(button.convert(button.bounds, to: nil))
+        // Status items are centred vertically in the menu bar, so its bottom edge mirrors the
+        // top of the screen around the item. `visibleFrame` bounds it when the bar is showing.
+        let menuBarBottom = min(2 * itemFrame.midY - screen.frame.maxY, screen.visibleFrame.maxY)
+        let origin = NSPoint(x: itemFrame.minX, y: menuBarBottom - Self.menuGap)
+
+        return button.convert(window.convertPoint(fromScreen: origin), from: nil)
+    }
+
+    /// Sizes the status item to the lyrics, or to the logo alone when lyrics are off, and
+    /// matches the view to the button's bounds.
+    private func layoutStatusItem() {
+        statusItem.length = AppSettings.shared.showMenuBarLyrics
+            ? CGFloat(AppSettings.shared.menuBarLyricsWidth)
+            : MenuBarLyricsView.logoWidth
+        if let button = statusItem.button {
+            lyricsView.frame = button.bounds
+            lyricsView.needsLayout = true
+            lyricsView.layoutSubtreeIfNeeded()
+        }
     }
 
     private func makeMenu() -> NSMenu {
@@ -181,8 +213,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 
+    /// The item itself always stays visible so the menu remains reachable; with menu bar
+    /// lyrics off it shrinks to the logo.
     private func applyMenuBarVisibility() {
-        lyricsItem.isVisible = AppSettings.shared.showMenuBarLyrics
+        lyricsView.showsLyrics = AppSettings.shared.showMenuBarLyrics
+        layoutStatusItem()
     }
 
     @objc private func openSettings() {
