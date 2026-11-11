@@ -111,6 +111,24 @@ final class AppSettings: ObservableObject {
     /// General JWT regex: header and payload start with `eyJ` (base64url of `{"`), each segment >= 20 chars.
     private static let jwtPattern = "eyJ[A-Za-z0-9_-]{20,}\\.eyJ[A-Za-z0-9_-]{20,}\\.[A-Za-z0-9_-]{20,}"
 
+    /// The bundle carries several JWTs side by side. The one MusicKit actually uses as
+    /// `developerToken` is the AMPWebPlay token: its header declares `kid == "WebPlayKid"`.
+    /// Other bundles (e.g. the 298-char MapKit/search token) look longer but return 401.
+    /// Picking by length therefore selects the wrong token, so match on the `kid` instead.
+    private static func isDeveloperToken(_ jwt: String) -> Bool {
+        let segments = jwt.split(separator: ".")
+        guard let headerSegment = segments.first else { return false }
+        var base64 = String(headerSegment)
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        base64 += String(repeating: "=", count: (4 - base64.count % 4) % 4)
+        guard let data = Data(base64Encoded: base64),
+              let header = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return false
+        }
+        return (header["kid"] as? String) == "WebPlayKid"
+    }
+
     func refreshDeveloperToken() async {
         do {
             let homeURL = URL(string: "https://music.apple.com/us/home")!
@@ -129,13 +147,12 @@ final class AppSettings: ObservableObject {
 
             let regex = try NSRegularExpression(pattern: Self.jwtPattern)
             let matches = regex.matches(in: js, range: NSRange(js.startIndex..., in: js))
+            let candidates = matches.compactMap { Range($0.range, in: js).map { String(js[$0]) } }
 
-            guard let best = matches.max(by: { $0.range.length < $1.range.length }),
-                  let range = Range(best.range, in: js) else {
-                logger.error("Could not find developer token in JS (\(matches.count) JWT candidates)")
+            guard let newToken = candidates.first(where: Self.isDeveloperToken) else {
+                logger.error("Could not find developer token in JS (\(candidates.count) JWT candidates, none with kid=WebPlayKid)")
                 return
             }
-            let newToken = String(js[range])
 
             await MainActor.run {
                 if newToken != self.developerToken {
