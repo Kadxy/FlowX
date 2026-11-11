@@ -75,6 +75,7 @@ final class MenuBarLyricsView: NSView {
             updateLyricsVisibility()
             controlIcons.forEach { $0.isHidden = true }
             needsLayout = true
+            updateAnimTimer()
         }
     }
 
@@ -83,7 +84,7 @@ final class MenuBarLyricsView: NSView {
             guard isPlaying != oldValue else { return }
             playPauseButton.image = symbol(isPlaying ? "pause.fill" : "play.fill",
                                            label: isPlaying ? "Pause" : "Play")
-            if animationLayer.isAnimating {
+            if animationLayer.needsTicks {
                 if isPlaying { animationLayer.unfreeze() } else { animationLayer.freeze() }
                 updateAnimTimer()
             } else {
@@ -315,7 +316,7 @@ final class MenuBarLyricsView: NSView {
     }
 
     private func updateAnimTimer() {
-        if animationLayer.isAnimating && isPlaying && !isHovering {
+        if showsLyrics && animationLayer.needsTicks && isPlaying && !isHovering {
             startAnimTimer()
         } else {
             stopAnimTimer()

@@ -11,7 +11,12 @@ final class LyricsAnimationLayer: CALayer {
 
     // MARK: - State
 
+    /// True while a lyric line is being animated in step with playback.
     private(set) var isAnimating: Bool = false
+    /// True while overflowing text that has no lyric timing is scrolling as a marquee.
+    private(set) var isMarquee: Bool = false
+    /// Whether `tick()` has anything to advance.
+    var needsTicks: Bool { isAnimating || isMarquee }
 
     // MARK: - Sublayers
 
@@ -20,6 +25,7 @@ final class LyricsAnimationLayer: CALayer {
     private var brightImageLayer: CALayer?
     private var karaokeMask: CALayer?
     private var edgeFadeMask: CAGradientLayer?
+    private var marqueeCopyLayer: CALayer?
 
     // MARK: - Text cache
 
@@ -61,6 +67,15 @@ final class LyricsAnimationLayer: CALayer {
     private let font: NSFont = .systemFont(ofSize: 14)
     private let scale: CGFloat = 2.0
 
+    /// Marquee pace, in points per second.
+    private static let marqueeSpeed: CGFloat = 30
+    /// How long the marquee rests at the start before each pass.
+    private static let marqueeRest: TimeInterval = 2
+    /// Blank space between the end of the text and the copy that follows it.
+    private static let marqueeGap: CGFloat = 40
+    /// How long the leading edge takes to fade as a pass starts and ends.
+    private static let marqueeFadeTime: TimeInterval = 0.4
+
     // MARK: - Public API
 
     /// Builds or rebuilds the animation. Safe to call repeatedly — tears down old layers each time.
@@ -87,6 +102,11 @@ final class LyricsAnimationLayer: CALayer {
         } else {
             buildStaticLayer()
             isAnimating = false
+            if isMarquee {
+                isFrozen = false
+                if !playing { freeze() }
+                tick()
+            }
         }
     }
 
@@ -107,7 +127,7 @@ final class LyricsAnimationLayer: CALayer {
     /// Advances the animation to the current time and sets layer properties directly.
     /// Called externally by a timer to drive rendering on all displays.
     func tick() {
-        guard isAnimating, animDuration > 0 else { return }
+        guard needsTicks, animDuration > 0 else { return }
 
         let elapsed: TimeInterval
         if isFrozen {
@@ -116,7 +136,11 @@ final class LyricsAnimationLayer: CALayer {
             elapsed = CACurrentMediaTime() - animStartTime
         }
 
-        let t = min(1, max(0, elapsed / animDuration))
+        let progress = elapsed / animDuration
+        // A marquee repeats; a lyric line runs once and holds its final frame.
+        let t = isMarquee
+            ? progress - progress.rounded(.down)
+            : min(1, max(0, progress))
 
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -125,6 +149,7 @@ final class LyricsAnimationLayer: CALayer {
             let x = interpolate(values: scrollValues, keyTimes: scrollKeyTimes,
                                 at: t, easeSegment: scrollEaseSegment)
             textImageLayer?.position.x = x
+            marqueeCopyLayer?.position.x = x + marqueeDistance
             dimImageLayer?.position.x = x
             brightImageLayer?.position.x = x
         }
@@ -186,13 +211,51 @@ final class LyricsAnimationLayer: CALayer {
         }
     }
 
-    /// Static text layer for non-animated content.
+    /// Text layer for content without lyric timing: centred when it fits, a marquee when not.
     private func buildStaticLayer() {
         let size = cachedTextSize
         guard size.width > 0, size.height > 0 else { return }
-        let x = size.width <= bounds.width ? (bounds.width - size.width) / 2 : 0
         let y = (bounds.height - size.height) / 2
-        textImageLayer = addImageLayer(renderTextImage(), size: size, origin: CGPoint(x: x, y: y))
+        guard size.width > bounds.width else {
+            let x = (bounds.width - size.width) / 2
+            textImageLayer = addImageLayer(renderTextImage(), size: size, origin: CGPoint(x: x, y: y))
+            return
+        }
+        buildMarquee(size: size, y: y)
+    }
+
+    // MARK: - Marquee
+
+    /// Distance one marquee pass covers: the text's width plus the gap before its copy.
+    private var marqueeDistance: CGFloat = 0
+
+    /// Scrolls overflowing text the way the system's own marquees do: it rests at the start,
+    /// runs through once at a steady pace with a copy of itself following after a gap, and
+    /// comes to rest again as the copy arrives where the original started.
+    private func buildMarquee(size: NSSize, y: CGFloat) {
+        let image = renderTextImage()
+        let distance = size.width + Self.marqueeGap
+        textImageLayer = addImageLayer(image, size: size, origin: CGPoint(x: 0, y: y))
+        marqueeCopyLayer = addImageLayer(image, size: size, origin: CGPoint(x: distance, y: y))
+        marqueeDistance = distance
+
+        let duration = Self.marqueeRest + TimeInterval(distance / Self.marqueeSpeed)
+        let restEnd = Self.marqueeRest / duration
+        animDuration = duration
+        animStartTime = CACurrentMediaTime()
+
+        scrollValues = [0, 0, -distance]
+        scrollKeyTimes = [0, restEnd, 1]
+
+        // At rest only the trailing edge fades, since the text runs on past it; during a pass
+        // the leading edge fades too.
+        installEdgeFadeMask()
+        let fade = min(Self.marqueeFadeTime / duration, (1 - restEnd) / 2)
+        edgeFadeKeyTimes = [0, restEnd, restEnd + fade, 1 - fade, 1]
+        edgeFadeLeftAlphas = [1, 1, 0, 0, 1]
+        edgeFadeRightAlphas = [0, 0, 0, 0, 0]
+
+        isMarquee = true
     }
 
     // MARK: - Karaoke Layers
@@ -329,8 +392,8 @@ final class LyricsAnimationLayer: CALayer {
 
     // MARK: - Edge Fade
 
-    /// Sets up the gradient mask layer and stores alpha keyframes for tick-based updates.
-    private func storeEdgeFade(scrollStart: Double, scrollEnd: Double, duration: TimeInterval) {
+    /// Installs the gradient mask whose end stops fade the text out at the layer's edges.
+    private func installEdgeFadeMask() {
         let fade = CAGradientLayer()
         fade.frame = bounds
         fade.startPoint = CGPoint(x: 0, y: 0.5)
@@ -345,6 +408,11 @@ final class LyricsAnimationLayer: CALayer {
 
         mask = fade
         edgeFadeMask = fade
+    }
+
+    /// Sets up the gradient mask layer and stores alpha keyframes for tick-based updates.
+    private func storeEdgeFade(scrollStart: Double, scrollEnd: Double, duration: TimeInterval) {
+        installEdgeFadeMask()
 
         // Compute alpha keyframes for left (stop 0) and right (stop 3).
         // noLeft  = left:1, right:0
@@ -440,14 +508,15 @@ final class LyricsAnimationLayer: CALayer {
     private func teardownSublayers() {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        [textImageLayer, dimImageLayer, brightImageLayer].forEach { $0?.removeFromSuperlayer() }
+        [textImageLayer, dimImageLayer, brightImageLayer, marqueeCopyLayer].forEach { $0?.removeFromSuperlayer() }
         mask = nil
         CATransaction.commit()
 
-        textImageLayer = nil; dimImageLayer = nil; brightImageLayer = nil
+        textImageLayer = nil; dimImageLayer = nil; brightImageLayer = nil; marqueeCopyLayer = nil
         karaokeMask = nil; edgeFadeMask = nil
         cachedWordWidths = []
         isAnimating = false
+        isMarquee = false
 
         // Reset animation descriptors
         scrollValues = []; scrollKeyTimes = []; scrollEaseSegment = nil
