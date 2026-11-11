@@ -28,6 +28,10 @@ final class MenuBarLyricsView: NSView {
     private var trackingArea: NSTrackingArea?
     private var currentText = ""
 
+    // MARK: - Animation timer
+
+    private var animTimer: Timer?
+
     // MARK: - Public properties
 
     var isPlaying: Bool = false {
@@ -37,6 +41,7 @@ final class MenuBarLyricsView: NSView {
                                                accessibility: isPlaying ? "Pause" : "Play")
             if animationLayer.isAnimating {
                 if isPlaying { animationLayer.unfreeze() } else { animationLayer.freeze() }
+                updateAnimTimer()
             } else {
                 rebuildAnimation()
             }
@@ -64,6 +69,10 @@ final class MenuBarLyricsView: NSView {
         setup()
     }
 
+    deinit {
+        animTimer?.invalidate()
+    }
+
     private func setup() {
         wantsLayer = true
         layer?.masksToBounds = true
@@ -80,14 +89,41 @@ final class MenuBarLyricsView: NSView {
         updateTrackingArea()
     }
 
+    // MARK: - Animation Timer
+
+    private func startAnimTimer() {
+        guard animTimer == nil else { return }
+        let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in
+            self?.animationLayer.tick()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        animTimer = timer
+    }
+
+    private func stopAnimTimer() {
+        animTimer?.invalidate()
+        animTimer = nil
+    }
+
+    private func updateAnimTimer() {
+        if animationLayer.isAnimating && isPlaying {
+            startAnimTimer()
+        } else {
+            stopAnimTimer()
+        }
+    }
+
     // MARK: - Drift Detection
 
-    private let driftThreshold: TimeInterval = 0.5
+    private let driftThreshold: TimeInterval = 1.0
+    private let driftResyncCooldown: CFTimeInterval = 1.0
+    private var lastDriftResyncAt: CFTimeInterval = 0
 
     /// Called on each poll. Detects animation drift from actual playback position and rebuilds if needed.
     func syncIfNeeded() {
-        guard animationLayer.isAnimating, !isHovering else { return }
+        guard animationLayer.isAnimating, !isHovering, isPlaying else { return }
         let now = CACurrentMediaTime()
+        guard now - lastDriftResyncAt >= driftResyncCooldown else { return }
         let actual = mc.playerPosition
 
         let expected: TimeInterval
@@ -99,6 +135,7 @@ final class MenuBarLyricsView: NSView {
 
         let drift = abs(actual - expected)
         guard drift > driftThreshold else { return }
+        lastDriftResyncAt = now
         rebuildAnimation()
     }
 
@@ -112,6 +149,7 @@ final class MenuBarLyricsView: NSView {
             position: mc.playerPosition,
             playing: isPlaying
         )
+        updateAnimTimer()
     }
 
     func refreshLayers() {
