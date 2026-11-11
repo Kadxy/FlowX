@@ -47,7 +47,11 @@ final class AppSettings: ObservableObject {
         load()
         applyLanguage()
         setupObservers()
-        Task { await refreshDeveloperToken() }
+        // Storefront detection needs the developer token, so run it afterwards.
+        Task {
+            await refreshDeveloperToken()
+            await refreshStorefrontFromToken()
+        }
     }
 
     // MARK: - Load / Save
@@ -82,7 +86,7 @@ final class AppSettings: ObservableObject {
     }
 
     private func save() {
-        let dict: [String: Any] = [
+        var dict: [String: Any] = [
             "developerToken": developerToken,
             "userToken": userToken,
             "storefront": storefront,
@@ -164,6 +168,22 @@ final class AppSettings: ObservableObject {
             }
         } catch {
             logger.error("Token refresh error: \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: - Storefront Auto-Detection
+
+    /// Resolve the account's storefront straight from the user token, so it never
+    /// has to be picked by hand. Falls back silently to the current value.
+    func refreshStorefrontFromToken() async {
+        guard !userToken.isEmpty, !developerToken.isEmpty else { return }
+        let status = await TokenValidator.validate(userToken: userToken, developerToken: developerToken)
+        guard case .valid(let info) = status, !info.regionCode.isEmpty else { return }
+        await MainActor.run {
+            if self.storefront != info.regionCode {
+                self.storefront = info.regionCode
+                logger.info("Storefront resolved from token: \(info.regionCode)")
+            }
         }
     }
 }
