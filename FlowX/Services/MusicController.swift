@@ -6,6 +6,8 @@ import AppKit
 final class MusicController: ObservableObject {
     static let shared = MusicController()
     private static let positionPollInterval: TimeInterval = 0.2
+    /// How long after a play/pause tap the optimistic state is checked against Music's own.
+    private static let stateConfirmationDelay: TimeInterval = 1
 
     @Published private(set) var playerState: PlayerState = .stopped
     @Published private(set) var currentTrack: TrackInfo = .empty
@@ -292,7 +294,34 @@ final class MusicController: ObservableObject {
         }
     }
 
-    func playPause() { musicApp.playpause() }
+    func playPause() {
+        musicApp.playpause()
+        applyOptimisticToggle()
+    }
+
+    /// Shows the result of a play/pause tap straight away rather than when Music's notification
+    /// arrives a moment later — a control should respond the instant it is used. Music remains
+    /// the source of truth: its notification overrides this, and a follow-up read corrects the
+    /// state should the tap not have taken effect.
+    private func applyOptimisticToggle() {
+        switch playerState {
+        case .playing:
+            playerState = .paused
+        case .paused:
+            // Same as a resume reported by Music: sync the position before the state flips.
+            playerPosition = musicApp.playerPosition
+            updateCurrentLyric()
+            playerState = .playing
+        default:
+            return
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.stateConfirmationDelay) { [weak self] in
+            guard let self, self.isMusicRunning, self.musicApp.isRunning else { return }
+            let actual = self.mapPlayerState(self.musicApp.playerState)
+            if actual != self.playerState { self.playerState = actual }
+        }
+    }
     func nextTrack() { musicApp.nextTrack() }
     func backTrack() { musicApp.backTrack() }
 
