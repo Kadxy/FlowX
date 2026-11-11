@@ -79,6 +79,9 @@ final class LyricsAnimationLayer: CALayer {
             anchorWallTime = CACurrentMediaTime()
             buildAnimations(line: line, position: position)
             isAnimating = true
+            // A frozen state left over from an earlier line must not carry into this one:
+            // it would pin every later line at a stale offset until the next pause/resume.
+            isFrozen = false
             if !playing { freeze() }
             tick()
         } else {
