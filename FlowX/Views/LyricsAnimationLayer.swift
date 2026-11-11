@@ -27,6 +27,28 @@ final class LyricsAnimationLayer: CALayer {
     private var cachedTextSize: NSSize = .zero
     private var cachedWordWidths: [CGFloat] = []
 
+    // MARK: - Timer-driven animation state
+
+    private var animStartTime: CFTimeInterval = 0
+    private var animDuration: TimeInterval = 0
+    private var isFrozen: Bool = false
+    private var frozenElapsed: TimeInterval = 0
+
+    /// Scroll keyframes for position.x (used by text/dim/bright layers).
+    private var scrollValues: [CGFloat] = []
+    private var scrollKeyTimes: [Double] = []
+    /// Segment index that uses easeInEaseOut (nil = all linear).
+    private var scrollEaseSegment: Int?
+
+    /// Karaoke mask width keyframes.
+    private var karaokeValues: [CGFloat] = []
+    private var karaokeKeyTimes: [Double] = []
+
+    /// Edge fade: per-stop alpha keyframes (only stop 0 and stop 3 change).
+    private var edgeFadeLeftAlphas: [CGFloat] = []
+    private var edgeFadeRightAlphas: [CGFloat] = []
+    private var edgeFadeKeyTimes: [Double] = []
+
     // MARK: - Drift detection anchors
 
     /// Playback position (seconds) when the animation was built.
@@ -58,6 +80,7 @@ final class LyricsAnimationLayer: CALayer {
             buildAnimations(line: line, position: position)
             isAnimating = true
             if !playing { freeze() }
+            tick()
         } else {
             buildStaticLayer()
             isAnimating = false
@@ -66,27 +89,62 @@ final class LyricsAnimationLayer: CALayer {
 
     /// Freezes all animations at their current visual position (called on pause).
     func freeze() {
-        let now = CACurrentMediaTime()
-        for sub in allAnimatedLayers {
-            guard sub.speed != 0 else { continue }
-            let pausedTime = sub.convertTime(now, from: nil)
-            sub.speed = 0
-            sub.timeOffset = pausedTime
-        }
+        guard !isFrozen else { return }
+        frozenElapsed = CACurrentMediaTime() - animStartTime
+        isFrozen = true
     }
 
     /// Resumes animations from the frozen position (called on play).
     func unfreeze() {
-        let now = CACurrentMediaTime()
-        for sub in allAnimatedLayers {
-            guard sub.speed == 0 else { continue }
-            let pausedTime = sub.timeOffset
-            sub.speed = 1
-            sub.timeOffset = 0
-            sub.beginTime = 0
-            let timeSincePause = sub.convertTime(now, from: nil) - pausedTime
-            sub.beginTime = timeSincePause
+        guard isFrozen else { return }
+        animStartTime = CACurrentMediaTime() - frozenElapsed
+        isFrozen = false
+    }
+
+    /// Advances the animation to the current time and sets layer properties directly.
+    /// Called externally by a timer to drive rendering on all displays.
+    func tick() {
+        guard isAnimating, animDuration > 0 else { return }
+
+        let elapsed: TimeInterval
+        if isFrozen {
+            elapsed = frozenElapsed
+        } else {
+            elapsed = CACurrentMediaTime() - animStartTime
         }
+
+        let t = min(1, max(0, elapsed / animDuration))
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+
+        if !scrollValues.isEmpty {
+            let x = interpolate(values: scrollValues, keyTimes: scrollKeyTimes,
+                                at: t, easeSegment: scrollEaseSegment)
+            textImageLayer?.position.x = x
+            dimImageLayer?.position.x = x
+            brightImageLayer?.position.x = x
+        }
+
+        if !karaokeValues.isEmpty {
+            karaokeMask?.bounds.size.width = interpolate(
+                values: karaokeValues, keyTimes: karaokeKeyTimes, at: t)
+        }
+
+        if !edgeFadeKeyTimes.isEmpty, let fade = edgeFadeMask {
+            let leftA = interpolate(values: edgeFadeLeftAlphas,
+                                    keyTimes: edgeFadeKeyTimes, at: t)
+            let rightA = interpolate(values: edgeFadeRightAlphas,
+                                     keyTimes: edgeFadeKeyTimes, at: t)
+            let solid = NSColor.black.cgColor
+            fade.colors = [
+                NSColor.black.withAlphaComponent(leftA).cgColor,
+                solid, solid,
+                NSColor.black.withAlphaComponent(rightA).cgColor
+            ]
+        }
+
+        CATransaction.commit()
     }
 
     // MARK: - Animation Construction
@@ -102,31 +160,26 @@ final class LyricsAnimationLayer: CALayer {
         let y = (bounds.height - size.height) / 2
         let origin = CGPoint(x: needsScroll ? 0 : (bounds.width - size.width) / 2, y: y)
 
+        animDuration = duration
+        animStartTime = CACurrentMediaTime() - elapsed
+
         // Build content layers (karaoke dual-layer or plain single-layer)
         if karaoke {
-            buildKaraokeLayers(line: line, size: size, origin: origin,
-                               duration: duration, elapsed: elapsed)
+            buildKaraokeLayers(line: line, size: size, origin: origin, duration: duration)
         } else {
             textImageLayer = addImageLayer(renderTextImage(), size: size, origin: origin)
         }
 
-        // Add scroll animation and edge fade when text overflows
+        // Store scroll & edge-fade keyframes when text overflows
         if needsScroll {
             let times = computeScrollTimes(karaoke: karaoke, line: line,
                                            textWidth: size.width, duration: duration)
-            if karaoke, let dim = dimImageLayer, let bright = brightImageLayer {
-                let anim = makeHighlightFollowScroll(line: line, textWidth: size.width,
-                                                     duration: duration, elapsed: elapsed)
-                dim.add(anim, forKey: "scroll")
-                if let copy = anim.copy() as? CAAnimation {
-                    bright.add(copy, forKey: "scroll")
-                }
-            } else if let text = textImageLayer {
-                text.add(makeScrollAnimation(textWidth: size.width, duration: duration,
-                                             elapsed: elapsed), forKey: "scroll")
+            if karaoke {
+                storeHighlightFollowScroll(line: line, textWidth: size.width, duration: duration)
+            } else {
+                storeScrollKeyframes(textWidth: size.width, startT: times.start, endT: times.end)
             }
-            buildEdgeFade(scrollStart: times.start, scrollEnd: times.end,
-                          duration: duration, elapsed: elapsed)
+            storeEdgeFade(scrollStart: times.start, scrollEnd: times.end, duration: duration)
         }
     }
 
@@ -142,8 +195,7 @@ final class LyricsAnimationLayer: CALayer {
     // MARK: - Karaoke Layers
 
     private func buildKaraokeLayers(
-        line: LyricLine, size: NSSize, origin: CGPoint,
-        duration: TimeInterval, elapsed: TimeInterval
+        line: LyricLine, size: NSSize, origin: CGPoint, duration: TimeInterval
     ) {
         // Cache per-word widths, scaled proportionally to correct for kerning
         let attrs: [NSAttributedString.Key: Any] = [.font: font]
@@ -166,10 +218,10 @@ final class LyricsAnimationLayer: CALayer {
         karaokeMask = kMask
         brightImageLayer = brightLayer
 
-        addKaraokeAnimation(line: line, duration: duration, elapsed: elapsed)
+        storeKaraokeKeyframes(line: line, duration: duration)
     }
 
-    // MARK: - Scroll Animation
+    // MARK: - Scroll Keyframes
 
     /// Computes scroll start/end times as a fraction of the lyric line duration.
     private func computeScrollTimes(
@@ -194,26 +246,23 @@ final class LyricsAnimationLayer: CALayer {
         }
     }
 
-    /// Non-karaoke scroll: starts scrolling when text reaches the 65% position.
-    private func makeScrollAnimation(
-        textWidth: CGFloat, duration: TimeInterval, elapsed: TimeInterval
-    ) -> CAKeyframeAnimation {
-        let leadRatio: CGFloat = 0.65
-        let startRatio = min(0.85, bounds.width * leadRatio / textWidth)
-        let endRatio = max(startRatio + 0.05, 1.0 - bounds.width * (1 - leadRatio) / textWidth)
-        return makeScrollKeyframes(textWidth: textWidth, duration: duration, elapsed: elapsed,
-                                   startT: startRatio, endT: endRatio)
+    /// Non-karaoke scroll: hold → easeInEaseOut scroll → hold.
+    private func storeScrollKeyframes(textWidth: CGFloat, startT: Double, endT: Double) {
+        let maxScroll = textWidth - bounds.width
+        scrollValues = [0, 0, -maxScroll, -maxScroll]
+        scrollKeyTimes = [0, startT, endT, 1]
+        scrollEaseSegment = 1  // segment between keyTimes[1] and keyTimes[2]
     }
 
-    /// Karaoke scroll: tracks the highlight position word-by-word, keeping the sung word near the center of the view.
-    private func makeHighlightFollowScroll(
-        line: LyricLine, textWidth: CGFloat, duration: TimeInterval, elapsed: TimeInterval
-    ) -> CAKeyframeAnimation {
+    /// Karaoke scroll: tracks the highlight position word-by-word.
+    private func storeHighlightFollowScroll(
+        line: LyricLine, textWidth: CGFloat, duration: TimeInterval
+    ) {
         let maxScroll = textWidth - bounds.width
         let center = bounds.width * 0.5
 
         var values: [CGFloat] = [0]
-        var keyTimes: [NSNumber] = [0]
+        var keyTimes: [Double] = [0]
         var accWidth: CGFloat = 0
         var lastT: Double = 0
 
@@ -222,20 +271,18 @@ final class LyricsAnimationLayer: CALayer {
             let t1 = max(0, (word.begin - line.time) / duration)
             let t2 = min(1, (word.end - line.time) / duration)
 
-            // At word begin: highlight leading edge is at accWidth
             if t1 > lastT {
                 let offset = min(maxScroll, max(0, accWidth - center))
-                keyTimes.append(NSNumber(value: t1))
+                keyTimes.append(t1)
                 values.append(-offset)
                 lastT = t1
             }
 
             accWidth += wordW
 
-            // At word end: highlight leading edge is at accWidth
             if t2 > lastT {
                 let offset = min(maxScroll, max(0, accWidth - center))
-                keyTimes.append(NSNumber(value: t2))
+                keyTimes.append(t2)
                 values.append(-offset)
                 lastT = t2
             }
@@ -246,120 +293,100 @@ final class LyricsAnimationLayer: CALayer {
             values.append(-maxScroll)
         }
 
-        let anim = CAKeyframeAnimation(keyPath: "position.x")
-        anim.values = values
-        anim.keyTimes = keyTimes
-        anim.duration = duration
-        anim.calculationMode = .linear
-        anim.isRemovedOnCompletion = false
-        anim.fillMode = .both
-        anim.beginTime = CACurrentMediaTime() - elapsed
-        return anim
+        scrollValues = values
+        scrollKeyTimes = keyTimes
+        scrollEaseSegment = nil  // all linear
     }
 
-    /// Scroll keyframes: [hold, hold, scroll-to-end, hold] with easeInEaseOut for the middle segment.
-    private func makeScrollKeyframes(
-        textWidth: CGFloat, duration: TimeInterval, elapsed: TimeInterval, startT: Double, endT: Double
-    ) -> CAKeyframeAnimation {
-        let anim = CAKeyframeAnimation(keyPath: "position.x")
-        let maxScroll = textWidth - bounds.width
-        anim.values = [0, 0, -maxScroll, -maxScroll] as [CGFloat]
-        anim.keyTimes = [0, NSNumber(value: startT), NSNumber(value: endT), 1]
-        anim.timingFunctions = [
-            CAMediaTimingFunction(name: .linear),
-            CAMediaTimingFunction(name: .easeInEaseOut),
-            CAMediaTimingFunction(name: .linear)
-        ]
-        anim.duration = duration
-        anim.calculationMode = .linear
-        anim.isRemovedOnCompletion = false
-        anim.fillMode = .both
-        anim.beginTime = CACurrentMediaTime() - elapsed
-        return anim
-    }
+    // MARK: - Karaoke Mask Keyframes
 
-    // MARK: - Karaoke Mask Animation
+    private func storeKaraokeKeyframes(line: LyricLine, duration: TimeInterval) {
+        guard !line.words.isEmpty else { return }
 
-    /// Builds a mask-width keyframe animation: each word's begin/end maps to a width value,
-    /// expanding the mask left-to-right to produce a word-by-word highlight effect.
-    private func addKaraokeAnimation(line: LyricLine, duration: TimeInterval, elapsed: TimeInterval) {
-        guard let mask = karaokeMask, !line.words.isEmpty else { return }
-
-        var values: [CGFloat] = [], keyTimes: [NSNumber] = []
+        var values: [CGFloat] = [], keyTimes: [Double] = []
         var accWidth: CGFloat = 0, lastT: Double = -1
 
         for (i, word) in line.words.enumerated() {
             let wordW = cachedWordWidths[i]
             let t1 = max(0, (word.begin - line.time) / duration)
             let t2 = min(1, (word.end - line.time) / duration)
-            if t1 > lastT { keyTimes.append(NSNumber(value: t1)); values.append(accWidth); lastT = t1 }
+            if t1 > lastT { keyTimes.append(t1); values.append(accWidth); lastT = t1 }
             accWidth += wordW
-            if t2 > lastT { keyTimes.append(NSNumber(value: t2)); values.append(accWidth); lastT = t2 }
+            if t2 > lastT { keyTimes.append(t2); values.append(accWidth); lastT = t2 }
         }
 
-        if keyTimes.isEmpty || keyTimes.first!.doubleValue > 0 {
+        if keyTimes.isEmpty || keyTimes.first! > 0 {
             keyTimes.insert(0, at: 0); values.insert(0, at: 0)
         }
-        if keyTimes.last!.doubleValue < 1 { keyTimes.append(1); values.append(accWidth) }
+        if keyTimes.last! < 1 { keyTimes.append(1); values.append(accWidth) }
 
-        let anim = CAKeyframeAnimation(keyPath: "bounds.size.width")
-        anim.values = values
-        anim.keyTimes = keyTimes
-        anim.duration = duration
-        anim.calculationMode = .linear
-        anim.isRemovedOnCompletion = false
-        anim.fillMode = .both
-        anim.beginTime = CACurrentMediaTime() - elapsed
-        mask.add(anim, forKey: "karaoke")
+        karaokeValues = values
+        karaokeKeyTimes = keyTimes
     }
 
     // MARK: - Edge Fade
 
-    /// Applies edge fade during scrolling via a `CAGradientLayer` mask on `self`.
-    /// Locations are fixed; colors animate to avoid the hard-edge artifact of growing gradient width.
-    private func buildEdgeFade(scrollStart: Double, scrollEnd: Double,
-                               duration: TimeInterval, elapsed: TimeInterval) {
+    /// Sets up the gradient mask layer and stores alpha keyframes for tick-based updates.
+    private func storeEdgeFade(scrollStart: Double, scrollEnd: Double, duration: TimeInterval) {
         let fade = CAGradientLayer()
         fade.frame = bounds
         fade.startPoint = CGPoint(x: 0, y: 0.5)
         fade.endPoint = CGPoint(x: 1, y: 0.5)
 
         let inset = Double(edgeFadeWidth / bounds.width)
-        let edge = NSColor.clear.cgColor
-        let solid = NSColor.black.cgColor
-
-        // Fixed locations — gradient shape never changes
         fade.locations = [0, NSNumber(value: inset), NSNumber(value: 1 - inset), 1]
-        fade.colors = [solid, solid, solid, edge]
 
-        // Color states: solid = fully visible, edge = faded
-        let noLeft  = [solid, solid, solid, edge]
-        let both    = [edge, solid, solid, edge]
-        let noRight = [edge, solid, solid, solid]
+        let solid = NSColor.black.cgColor
+        fade.colors = [solid, solid, solid, NSColor.clear.cgColor]
+        fade.cornerRadius = cornerRadius
 
+        mask = fade
+        edgeFadeMask = fade
+
+        // Compute alpha keyframes for left (stop 0) and right (stop 3).
+        // noLeft  = left:1, right:0
+        // both    = left:0, right:0
+        // noRight = left:0, right:1
         let desiredTr = 0.75 / duration
         let ahead = 0.15 / duration
         let leftTr = min(desiredTr, scrollStart + ahead)
         let rightTr = min(desiredTr, 1 - scrollEnd + ahead)
 
-        let anim = CAKeyframeAnimation(keyPath: "colors")
-        anim.values = [noLeft, noLeft, both, both, noRight, noRight]
-        anim.keyTimes = [0,
-                         NSNumber(value: max(0, scrollStart - leftTr)),
-                         NSNumber(value: max(0, scrollStart - ahead)),
-                         NSNumber(value: min(1, scrollEnd - ahead)),
-                         NSNumber(value: min(1, scrollEnd + rightTr - ahead)),
-                         1]
-        anim.duration = duration
-        anim.calculationMode = .linear
-        anim.isRemovedOnCompletion = false
-        anim.fillMode = .both
-        anim.beginTime = CACurrentMediaTime() - elapsed
-        fade.add(anim, forKey: "edgeFade")
-        fade.cornerRadius = cornerRadius
+        edgeFadeKeyTimes = [
+            0,
+            max(0, scrollStart - leftTr),
+            max(0, scrollStart - ahead),
+            min(1, scrollEnd - ahead),
+            min(1, scrollEnd + rightTr - ahead),
+            1
+        ]
+        edgeFadeLeftAlphas  = [1, 1, 0, 0, 0, 0]
+        edgeFadeRightAlphas = [0, 0, 0, 0, 1, 1]
+    }
 
-        mask = fade
-        edgeFadeMask = fade
+    // MARK: - Interpolation
+
+    /// Linearly interpolates a keyframe animation, with optional easeInEaseOut on one segment.
+    private func interpolate(
+        values: [CGFloat], keyTimes: [Double], at t: Double, easeSegment: Int? = nil
+    ) -> CGFloat {
+        guard values.count >= 2, values.count == keyTimes.count else { return values.first ?? 0 }
+        let clamped = max(0, min(1, t))
+
+        for i in 1..<keyTimes.count {
+            if clamped <= keyTimes[i] {
+                let t0 = keyTimes[i - 1]
+                let t1 = keyTimes[i]
+                let segLen = t1 - t0
+                guard segLen > 0 else { return values[i] }
+                var local = (clamped - t0) / segLen
+                if let seg = easeSegment, (i - 1) == seg {
+                    local = local * local * (3 - 2 * local)  // smoothstep
+                }
+                return values[i - 1] + CGFloat(local) * (values[i] - values[i - 1])
+            }
+        }
+        return values.last ?? 0
     }
 
     // MARK: - Text Rendering
@@ -406,11 +433,6 @@ final class LyricsAnimationLayer: CALayer {
         return l
     }
 
-    /// All sublayers that need freeze/unfreeze.
-    private var allAnimatedLayers: [CALayer] {
-        [textImageLayer, dimImageLayer, brightImageLayer, karaokeMask, edgeFadeMask].compactMap { $0 }
-    }
-
     /// Tears down all sublayers and resets state.
     private func teardownSublayers() {
         CATransaction.begin()
@@ -423,5 +445,10 @@ final class LyricsAnimationLayer: CALayer {
         karaokeMask = nil; edgeFadeMask = nil
         cachedWordWidths = []
         isAnimating = false
+
+        // Reset animation descriptors
+        scrollValues = []; scrollKeyTimes = []; scrollEaseSegment = nil
+        karaokeValues = []; karaokeKeyTimes = []
+        edgeFadeLeftAlphas = []; edgeFadeRightAlphas = []; edgeFadeKeyTimes = []
     }
 }
